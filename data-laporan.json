@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1768467460320,
+    "judul": "mmmmm",
+    "kategori": "Komputer",
+    "prioritas": "Rendah",
+    "deskripsi": "nnnnn",
+    "gambar": "1768467460319-WhatsApp_Image_2025-12-30_at_00.21.13_(1).jpeg",
+    "status": "Baru",
+    "pic": "",
+    "komentar": "",
+    "createdAt": "2026-01-15T08:57:40.320Z"
+  },
+  {
+    "id": 1768467391206,
+    "judul": "testtttttttt",
+    "kategori": "Komputer",
+    "prioritas": "Rendah",
+    "deskripsi": "ghhgcgrddyff",
+    "gambar": "1768467391204-WhatsApp_Image_2025-12-29_at_15.43.53_(1).jpeg",
+    "status": "Baru",
+    "pic": "",
+    "komentar": "",
+    "createdAt": "2026-01-15T08:56:31.206Z"
+  }
+]
