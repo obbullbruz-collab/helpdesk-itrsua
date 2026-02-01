@@ -1,11 +1,11 @@
 import TelegramBot from "node-telegram-bot-api";
 import mysql from "mysql2/promise";
 import bcrypt from "bcrypt";
-import express from "express";
 
 // ================= CONFIG =================
-const TOKEN = "8526115117:AAHrFzBCQ6cAg_McFe6l5LiBn_iD_a0whjw";
-const bot = new TelegramBot(TOKEN, { polling: true });
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
+  polling: true,
+});
 
 // ================= DATABASE =================
 const db = await mysql.createPool({
@@ -15,35 +15,33 @@ const db = await mysql.createPool({
   database: "helpdesk_it",
 });
 
-// ================= EXPRESS =================
-const app = express();
-app.use(express.json());
-
-app.listen(4000, () => {
-  console.log("📡 Bot API jalan di http://localhost:4000");
-});
+console.log("🤖 Bot Telegram berjalan...");
 
 // ================= /start =================
-bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(
-    msg.chat.id,
+bot.onText(/\/start/, async (msg) => {
+  const chatId = msg.chat.id;
+
+  await bot.sendMessage(
+    chatId,
     `👋 *Helpdesk IT UNAND Bot*
 
 Perintah:
-👉 *daftar* — membuat akun
-👉 *batal* — membatalkan proses
-👉 */reset KODE PASSWORD* — reset password
+👉 ketik *daftar* → buat akun
+👉 ketik *batal* → batalkan proses
+👉 */reset KODE PASSWORD* → reset password
 
 Contoh:
 /reset 123456 passwordbaru`,
     { parse_mode: "Markdown" }
   );
+
+  await db.query(
+    "UPDATE users SET telegram_chat_id=? WHERE telegram_chat_id IS NULL",
+    [chatId]
+  );
 });
 
-// ================= SESSION DAFTAR =================
-const sessions = {};
-
-// ================= RESET PASSWORD (PAKAI TOKEN) =================
+// ================= RESET TOKEN =================
 bot.onText(/\/reset (\d{6}) (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   const token = match[1];
@@ -53,83 +51,85 @@ bot.onText(/\/reset (\d{6}) (.+)/, async (msg, match) => {
     return bot.sendMessage(chatId, "Password minimal 4 karakter.");
   }
 
-  try {
-    const [rows] = await db.query(
-      `SELECT id FROM users
-       WHERE reset_token = ?
-       AND telegram_chat_id = ?
-       AND reset_expired > NOW()
-       LIMIT 1`,
-      [token, chatId]
-    );
+  const [rows] = await db.query(
+    `SELECT id FROM users
+     WHERE reset_token=?
+     AND telegram_chat_id=?
+     AND reset_expired > NOW()
+     LIMIT 1`,
+    [token, chatId]
+  );
 
-    if (!rows.length) {
-      return bot.sendMessage(
-        chatId,
-        "❌ Token tidak valid atau sudah kadaluarsa."
-      );
-    }
-
-    const hash = await bcrypt.hash(newPassword, 10);
-
-    await db.query(
-      `UPDATE users
-       SET password=?, reset_token=NULL, reset_expired=NULL
-       WHERE id=?`,
-      [hash, rows[0].id]
-    );
-
-    return bot.sendMessage(
-      chatId,
-      "✅ Password berhasil direset.\nSilakan login dengan password baru."
-    );
-  } catch (e) {
-    console.error(e);
-    return bot.sendMessage(chatId, "❌ Server error.");
+  if (!rows.length) {
+    return bot.sendMessage(chatId, "❌ Token tidak valid / kadaluarsa.");
   }
+
+  const hash = await bcrypt.hash(newPassword, 10);
+
+  await db.query(
+    `UPDATE users
+     SET password=?, reset_token=NULL, reset_expired=NULL
+     WHERE id=?`,
+    [hash, rows[0].id]
+  );
+
+  return bot.sendMessage(chatId, "✅ Password berhasil direset.");
 });
 
-// ================= DAFTAR VIA TELEGRAM =================
+// ================= MESSAGE HANDLER UTAMA =================
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
-  const userId = msg.from.id;
   const text = (msg.text || "").trim().toLowerCase();
+  if (!text || text.startsWith("/")) return;
 
+  const [[user]] = await db.query(
+    "SELECT * FROM users WHERE telegram_chat_id=? LIMIT 1",
+    [chatId]
+  );
+
+  // ===== BATAL =====
   if (text === "batal") {
-    delete sessions[chatId];
+    await db.query(
+      "UPDATE users SET telegram_step=NULL WHERE telegram_chat_id=?",
+      [chatId]
+    );
     return bot.sendMessage(chatId, "❌ Proses dibatalkan.");
   }
 
+  // ===== DAFTAR =====
   if (text === "daftar") {
-    sessions[chatId] = { step: "username" };
+    await db.query(
+      "UPDATE users SET telegram_step='daftar_username' WHERE telegram_chat_id=?",
+      [chatId]
+    );
     return bot.sendMessage(chatId, "Masukkan *username*:", {
       parse_mode: "Markdown",
     });
   }
 
-  const session = sessions[chatId];
-  if (!session) return;
-
-  // STEP USERNAME
-  if (session.step === "username") {
-    const [rows] = await db.query(
+  // ===== STEP USERNAME =====
+  if (user?.telegram_step === "daftar_username") {
+    const [cek] = await db.query(
       "SELECT id FROM users WHERE username=? LIMIT 1",
       [text]
     );
 
-    if (rows.length) {
+    if (cek.length) {
       return bot.sendMessage(chatId, "❌ Username sudah digunakan.");
     }
 
-    session.username = text;
-    session.step = "password";
+    await db.query(
+      "UPDATE users SET username=?, telegram_step='daftar_password' WHERE telegram_chat_id=?",
+      [text, chatId]
+    );
+
     return bot.sendMessage(chatId, "Masukkan *password*:", {
       parse_mode: "Markdown",
     });
   }
 
-  // STEP PASSWORD
-  if (session.step === "password") {
+  // ===== STEP PASSWORD =====
+  if (user?.telegram_step === "daftar_password") {
     if (text.length < 4) {
       return bot.sendMessage(chatId, "Password minimal 4 karakter.");
     }
@@ -137,18 +137,15 @@ bot.on("message", async (msg) => {
     const hash = await bcrypt.hash(text, 10);
 
     await db.query(
-      `INSERT INTO users
-       (username, password, role, telegram_id, telegram_chat_id)
-       VALUES (?, ?, 'user', ?, ?)`,
-      [session.username, hash, userId, chatId]
+      `UPDATE users
+       SET password=?, role='user', telegram_step=NULL
+       WHERE telegram_chat_id=?`,
+      [hash, chatId]
     );
 
-    delete sessions[chatId];
     return bot.sendMessage(
       chatId,
       "✅ Akun berhasil dibuat.\nSilakan login di web Helpdesk IT."
     );
   }
 });
-
-console.log("🤖 Bot Telegram berjalan...");
