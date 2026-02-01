@@ -1,33 +1,57 @@
 export const runtime = "nodejs";
 
 import { db } from "@/lib/db";
+import jwt from "jsonwebtoken";
 
-export async function GET(request) {
+export async function GET(req) {
   try {
-    const { searchParams } = new URL(request.url);
+    const cookie = req.headers.get("cookie") || "";
+    const token = cookie
+      .split("; ")
+      .find((c) => c.startsWith("token="))
+      ?.split("=")[1];
+
+    if (!token) {
+      return Response.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.role !== "teknisi") {
+      return Response.json({ message: "Forbidden" }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(req.url);
     const mode = searchParams.get("mode") || "harian";
 
-    let group = "DATE(created_at)";
-    if (mode === "bulanan") group = "DATE_FORMAT(created_at, '%Y-%m')";
-    if (mode === "mingguan") group = "YEARWEEK(created_at)";
+    let query = "";
 
-    const [rows] = await db.query(`
-      SELECT ${group} AS label, COUNT(*) AS total
-      FROM laporan
-      GROUP BY label
-      ORDER BY label ASC
-    `);
+    if (mode === "harian") {
+      query = `
+        SELECT DATE(created_at) label, COUNT(*) total
+        FROM laporan
+        GROUP BY DATE(created_at)
+        ORDER BY label
+      `;
+    } else if (mode === "mingguan") {
+      query = `
+        SELECT YEARWEEK(created_at) label, COUNT(*) total
+        FROM laporan
+        GROUP BY YEARWEEK(created_at)
+        ORDER BY label
+      `;
+    } else {
+      query = `
+        SELECT DATE_FORMAT(created_at, '%Y-%m') label, COUNT(*) total
+        FROM laporan
+        GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+        ORDER BY label
+      `;
+    }
 
-    return new Response(JSON.stringify(rows), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    const [rows] = await db.query(query);
+    return Response.json(rows);
   } catch (err) {
-    console.error("STATISTIK ERROR:", err);
-    // WAJIB tetap kirim JSON meskipun error
-    return new Response(JSON.stringify([]), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    console.error("GRAFIK ERROR:", err);
+    return Response.json([], { status: 500 });
   }
 }
