@@ -1,22 +1,27 @@
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import { db } from "@/lib/db";
 
-export async function GET() {
+export async function GET(req) {
   try {
-    const token = cookies().get("token")?.value;
+    // 🔥 AMBIL COOKIE MANUAL (PALING AMAN DI RAILWAY)
+    const cookie = req.headers.get("cookie") || "";
+    const token = cookie
+      .split("; ")
+      .find((c) => c.startsWith("token="))
+      ?.split("=")[1];
+
     if (!token) {
-      return NextResponse.json([], { status: 401 });
+      return Response.json({ message: "Unauthorized" }, { status: 401 });
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const userId = decoded.id || decoded.userId || decoded.user_id;
+    const userId = decoded.id;
 
     if (!userId) {
-      return NextResponse.json([], { status: 401 });
+      return Response.json({ message: "Invalid token" }, { status: 401 });
     }
 
     const [rows] = await db.query(
@@ -24,9 +29,12 @@ export async function GET() {
       [userId]
     );
 
-    return NextResponse.json(rows);
+    return Response.json(rows);
   } catch (err) {
     console.error("GET USER LAPORAN ERROR:", err);
-    return NextResponse.json([], { status: 500 });
+    return Response.json(
+      { message: "Server error", error: String(err) },
+      { status: 500 }
+    );
   }
 }
