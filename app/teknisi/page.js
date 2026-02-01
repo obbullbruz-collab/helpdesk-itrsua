@@ -27,7 +27,7 @@ export default function TeknisiPage() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState("harian");
 
-  /* ================= FETCH LAPORAN ================= */
+  // ================= FETCH LAPORAN =================
   const fetchLaporan = async () => {
     try {
       const res = await fetch("/api/teknisi/laporan");
@@ -38,13 +38,12 @@ export default function TeknisiPage() {
 
       const data = JSON.parse(text);
       setLaporan(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Fetch laporan error:", err);
+    } catch {
       setLaporan([]);
     }
   };
 
-  /* ================= FETCH GRAFIK ================= */
+  // ================= FETCH GRAFIK =================
   const fetchChart = async (m = mode) => {
     try {
       const res = await fetch(`/api/teknisi/statistik?mode=${m}`);
@@ -55,7 +54,6 @@ export default function TeknisiPage() {
     }
   };
 
-  /* ================= INIT ================= */
   useEffect(() => {
     const init = async () => {
       setLoading(true);
@@ -70,7 +68,7 @@ export default function TeknisiPage() {
     fetchChart(mode);
   }, [mode]);
 
-  /* ================= UPDATE ================= */
+  // ================= UPDATE =================
   const handleUpdate = async (id, status, pic, estimasi, komentar) => {
     try {
       const res = await fetch(`/api/laporan/${id}`, {
@@ -79,24 +77,22 @@ export default function TeknisiPage() {
         body: JSON.stringify({ status, pic, estimasi, komentar }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal update");
-
+      if (!res.ok) throw new Error("Gagal update");
       alert("Berhasil update laporan");
       await fetchLaporan();
     } catch (err) {
-      alert("Gagal update laporan: " + err.message);
+      alert(err.message);
     }
   };
 
   if (loading) return <p className="p-6">Memuat...</p>;
 
-  /* ================= FILTER STATUS ================= */
-  const baru = laporan.filter((l) => l.status?.toLowerCase() === "baru");
-  const proses = laporan.filter((l) => l.status?.toLowerCase() === "diproses");
-  const selesai = laporan.filter((l) => l.status?.toLowerCase() === "selesai");
+  // ================= FILTER =================
+  const baru = laporan.filter((l) => l.status === "Baru");
+  const proses = laporan.filter((l) => l.status === "Diproses");
+  const selesai = laporan.filter((l) => l.status === "Selesai");
 
-  /* ================= LABEL GRAFIK ================= */
+  // ================= LABEL GRAFIK =================
   const labels = chart.map((c) => {
     if (mode === "mingguan") {
       const start = new Date(c.start_date).toLocaleDateString("id-ID", {
@@ -108,6 +104,14 @@ export default function TeknisiPage() {
         month: "short",
       });
       return `${start} – ${end}`;
+    }
+
+    if (mode === "bulanan") {
+      const date = new Date(c.year, c.month - 1, 1);
+      return date.toLocaleDateString("id-ID", {
+        month: "long",
+        year: "numeric",
+      });
     }
 
     return new Date(c.label).toLocaleDateString("id-ID", {
@@ -124,14 +128,14 @@ export default function TeknisiPage() {
 
       {/* ================= GRAFIK ================= */}
       <div className="bg-white p-5 rounded-xl shadow mb-10">
-        <div className="flex justify-between items-center mb-3">
+        <div className="flex justify-between mb-3">
           <h2 className="font-semibold">Grafik Laporan</h2>
           <div className="flex gap-2">
             {["harian", "mingguan", "bulanan"].map((m) => (
               <button
                 key={m}
                 onClick={() => setMode(m)}
-                className={`px-3 py-1 rounded text-sm ${
+                className={`px-3 py-1 rounded ${
                   mode === m
                     ? "bg-green-600 text-white"
                     : "bg-gray-200"
@@ -143,19 +147,17 @@ export default function TeknisiPage() {
           </div>
         </div>
 
-        <div className="relative h-[280px]">
+        <div className="h-[280px]">
           <Line
             data={{
               labels,
               datasets: [
                 {
-                  label: "Jumlah Laporan",
                   data: values,
-                  fill: true,
-                  tension: 0.4,
                   borderColor: "#22c55e",
                   backgroundColor: "rgba(34,197,94,0.15)",
-                  pointRadius: 4,
+                  tension: 0.4,
+                  fill: true,
                 },
               ],
             }}
@@ -171,7 +173,6 @@ export default function TeknisiPage() {
         </div>
       </div>
 
-      {/* ================= LIST ================= */}
       <Section title="Laporan Baru" items={baru} onUpdate={handleUpdate} />
       <Section title="Laporan Diproses" items={proses} onUpdate={handleUpdate} />
       <Section title="Laporan Selesai" items={selesai} onUpdate={handleUpdate} />
@@ -179,15 +180,15 @@ export default function TeknisiPage() {
   );
 }
 
-/* ================= SECTION ================= */
+// ================= SECTION =================
 function Section({ title, items, onUpdate }) {
   return (
     <div className="mb-10">
       <h2 className="text-xl font-bold mb-3">{title}</h2>
+      {items.length === 0 && (
+        <p className="text-gray-400 text-sm">Tidak ada data</p>
+      )}
       <div className="space-y-4">
-        {items.length === 0 && (
-          <p className="text-gray-400 text-sm">Tidak ada data</p>
-        )}
         {items.map((item) => (
           <LaporanCard key={item.id} item={item} onUpdate={onUpdate} />
         ))}
@@ -196,9 +197,9 @@ function Section({ title, items, onUpdate }) {
   );
 }
 
-/* ================= CARD ================= */
+// ================= CARD =================
 function LaporanCard({ item, onUpdate }) {
-  const [status, setStatus] = useState(item.status || "Baru");
+  const [status, setStatus] = useState(item.status);
   const [pic, setPic] = useState(item.pic || "");
   const [estimasi, setEstimasi] = useState(item.estimasi || "");
   const [komentar, setKomentar] = useState(item.komentar || "");
@@ -212,11 +213,7 @@ function LaporanCard({ item, onUpdate }) {
     <div className="border rounded p-4 flex gap-4 bg-yellow-50">
       <div className="w-40 h-32 bg-white border flex items-center justify-center overflow-hidden">
         {img ? (
-          <img
-            src={img}
-            alt={item.judul}
-            className="w-full h-full object-cover"
-          />
+          <img src={img} className="w-full h-full object-cover" />
         ) : (
           <span className="text-gray-400 text-sm">Tidak ada gambar</span>
         )}
@@ -224,21 +221,17 @@ function LaporanCard({ item, onUpdate }) {
 
       <div className="flex-1">
         <h3 className="font-bold">{item.judul}</h3>
-
         <p className="text-sm text-gray-600">
-          👤 {item.username} •{" "}
+          {item.username} •{" "}
           {new Date(item.created_at).toLocaleString("id-ID")}
         </p>
 
-        <p className="text-sm mt-1">
+        <p className="text-sm">
           <b>Kategori:</b> {item.kategori} |{" "}
-          <b>Prioritas:</b> {item.prioritas} |{" "}
-          <b>Status:</b> {item.status}
+          <b>Prioritas:</b> {item.prioritas}
         </p>
 
-        <p className="text-sm mt-2">
-          <b>Deskripsi:</b> {item.deskripsi}
-        </p>
+        <p className="text-sm mt-1">{item.deskripsi}</p>
 
         <div className="flex gap-2 mt-3 flex-wrap">
           <select
@@ -246,9 +239,9 @@ function LaporanCard({ item, onUpdate }) {
             value={status}
             onChange={(e) => setStatus(e.target.value)}
           >
-            <option value="Baru">Baru</option>
-            <option value="Diproses">Diproses</option>
-            <option value="Selesai">Selesai</option>
+            <option>Baru</option>
+            <option>Diproses</option>
+            <option>Selesai</option>
           </select>
 
           <input
@@ -260,7 +253,7 @@ function LaporanCard({ item, onUpdate }) {
 
           <input
             className="border p-1 rounded"
-            placeholder="Estimasi (contoh: 2 hari)"
+            placeholder="Estimasi"
             value={estimasi}
             onChange={(e) => setEstimasi(e.target.value)}
           />

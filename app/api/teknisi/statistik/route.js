@@ -10,7 +10,7 @@ export async function GET(req) {
     // ================= HARIAN =================
     if (mode === "harian") {
       const [r] = await db.query(`
-        SELECT 
+        SELECT
           DATE(created_at) AS label,
           COUNT(*) AS total
         FROM laporan
@@ -39,7 +39,8 @@ export async function GET(req) {
     else if (mode === "bulanan") {
       const [r] = await db.query(`
         SELECT
-          DATE_FORMAT(created_at, '%Y-%m-01') AS label,
+          YEAR(created_at) AS year,
+          MONTH(created_at) AS month,
           COUNT(*) AS total
         FROM laporan
         GROUP BY YEAR(created_at), MONTH(created_at)
