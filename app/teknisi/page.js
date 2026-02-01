@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 
-const STATUS_COLOR = {
-  Baru: "border-blue-400 bg-blue-50",
-  Diproses: "border-yellow-400 bg-yellow-50",
-  Selesai: "border-green-400 bg-green-50",
+const STATUS_BADGE = {
+  Baru: "bg-blue-100 text-blue-700",
+  Diproses: "bg-yellow-100 text-yellow-700",
+  Selesai: "bg-green-100 text-green-700",
 };
 
 export default function TeknisiPage() {
@@ -27,7 +27,7 @@ export default function TeknisiPage() {
   const handleUpdate = async (l) => {
     setLoadingId(l.id);
 
-    await fetch("/api/teknisi/laporan/update", {
+    const res = await fetch("/api/teknisi/laporan/update", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -35,10 +35,16 @@ export default function TeknisiPage() {
         id: l.id,
         status: l._status || l.status,
         pic: l._pic || l.pic,
-        komentar: l._komentar || l.komentar,
         estimasi: l._estimasi || l.estimasi,
+        komentar: l._komentar || l.komentar,
       }),
     });
+
+    if (res.ok) {
+      alert("✅ Laporan berhasil diupdate & notifikasi dikirim ke user");
+    } else {
+      alert("❌ Gagal update laporan");
+    }
 
     await fetchLaporan();
     setLoadingId(null);
@@ -57,72 +63,82 @@ export default function TeknisiPage() {
         return (
           <div
             key={l.id}
-            className={`border-l-4 rounded p-4 flex gap-4 ${STATUS_COLOR[l.status]}`}
+            className="bg-white border rounded shadow p-4 space-y-3"
           >
-            {/* IMAGE */}
-            <div className="w-28 h-28 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
-              {img ? (
-                <img src={img} className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-xs text-gray-400">No Image</span>
-              )}
+            {/* HEADER */}
+            <div className="flex justify-between items-start">
+              <h2 className="font-semibold text-lg">{l.judul}</h2>
+              <span
+                className={`text-xs px-2 py-1 rounded ${STATUS_BADGE[l.status]}`}
+              >
+                {l.status}
+              </span>
             </div>
 
-            {/* CONTENT */}
-            <div className="flex-1">
-              <h2 className="font-semibold text-lg">{l.judul}</h2>
-              <p className="text-xs text-gray-500">
-                👤 {l.username} •{" "}
-                {new Date(l.created_at).toLocaleString("id-ID")}
-              </p>
+            <p className="text-xs text-gray-500">
+              👤 {l.username} •{" "}
+              {new Date(l.created_at).toLocaleString("id-ID")}
+            </p>
 
-              <p className="text-sm mt-1">
-                {l.kategori} | {l.prioritas} | {l.status}
-              </p>
+            <p className="text-sm">
+              <b>Kategori:</b> {l.kategori} |{" "}
+              <b>Prioritas:</b> {l.prioritas} |{" "}
+              <b>Estimasi:</b> {l.estimasi || "-"}
+            </p>
 
-              <p className="text-sm text-gray-700">{l.deskripsi}</p>
+            {/* IMAGE */}
+            {img && (
+              <img
+                src={img}
+                alt={l.judul}
+                className="w-full max-w-sm rounded border"
+              />
+            )}
 
-              {/* FORM */}
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-2 mt-3">
-                <select
-                  defaultValue={l.status}
-                  className="border rounded px-2 py-1"
-                  onChange={(e) => (l._status = e.target.value)}
-                >
-                  <option>Baru</option>
-                  <option>Diproses</option>
-                  <option>Selesai</option>
-                </select>
+            <p className="text-sm text-gray-700">
+              <b>Deskripsi:</b> {l.deskripsi}
+            </p>
 
-                <input
-                  placeholder="PIC"
-                  defaultValue={l.pic || ""}
-                  className="border rounded px-2 py-1"
-                  onChange={(e) => (l._pic = e.target.value)}
-                />
+            {/* FORM UPDATE */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              <select
+                defaultValue={l.status}
+                className="border rounded px-2 py-1"
+                onChange={(e) => (l._status = e.target.value)}
+              >
+                <option>Baru</option>
+                <option>Diproses</option>
+                <option>Selesai</option>
+              </select>
 
-                <input
-                  placeholder="Estimasi (contoh: 2 hari)"
-                  defaultValue={l.estimasi || ""}
-                  className="border rounded px-2 py-1"
-                  onChange={(e) => (l._estimasi = e.target.value)}
-                />
+              <input
+                defaultValue={l.pic || ""}
+                placeholder="PIC"
+                className="border rounded px-2 py-1"
+                onChange={(e) => (l._pic = e.target.value)}
+              />
 
-                <input
-                  placeholder="Komentar teknisi"
-                  defaultValue={l.komentar || ""}
-                  className="border rounded px-2 py-1 col-span-2"
-                  onChange={(e) => (l._komentar = e.target.value)}
-                />
+              <input
+                defaultValue={l.estimasi || ""}
+                placeholder="Estimasi (contoh: 2 hari)"
+                className="border rounded px-2 py-1"
+                onChange={(e) => (l._estimasi = e.target.value)}
+              />
 
-                <button
-                  disabled={loadingId === l.id}
-                  onClick={() => handleUpdate(l)}
-                  className="bg-blue-600 text-white rounded px-3 py-1 hover:bg-blue-700 disabled:opacity-50 md:col-span-5"
-                >
-                  {loadingId === l.id ? "Updating..." : "Update"}
-                </button>
-              </div>
+              <input
+                defaultValue={l.komentar || ""}
+                placeholder="Komentar teknisi"
+                className="border rounded px-2 py-1 md:col-span-4"
+                onChange={(e) => (l._komentar = e.target.value)}
+              />
+
+              <button
+                disabled={loadingId === l.id}
+                onClick={() => handleUpdate(l)}
+                className="bg-blue-600 text-white rounded px-4 py-2 hover:bg-blue-700 disabled:opacity-50 md:col-span-4"
+              >
+                {loadingId === l.id ? "Updating..." : "Update"}
+              </button>
             </div>
           </div>
         );
