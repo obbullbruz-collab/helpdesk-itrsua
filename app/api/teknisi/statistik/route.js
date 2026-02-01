@@ -1,57 +1,56 @@
-export const runtime = "nodejs";
-
 import { db } from "@/lib/db";
-import jwt from "jsonwebtoken";
 
 export async function GET(req) {
   try {
-    const cookie = req.headers.get("cookie") || "";
-    const token = cookie
-      .split("; ")
-      .find((c) => c.startsWith("token="))
-      ?.split("=")[1];
-
-    if (!token) {
-      return Response.json({ message: "Unauthorized" }, { status: 401 });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (decoded.role !== "teknisi") {
-      return Response.json({ message: "Forbidden" }, { status: 403 });
-    }
-
     const { searchParams } = new URL(req.url);
     const mode = searchParams.get("mode") || "harian";
 
-    let query = "";
+    let rows = [];
 
+    // ================= HARIAN =================
     if (mode === "harian") {
-      query = `
-        SELECT DATE(created_at) label, COUNT(*) total
+      const [r] = await db.query(`
+        SELECT 
+          DATE(created_at) AS label,
+          COUNT(*) AS total
         FROM laporan
         GROUP BY DATE(created_at)
-        ORDER BY label
-      `;
-    } else if (mode === "mingguan") {
-      query = `
-        SELECT YEARWEEK(created_at) label, COUNT(*) total
-        FROM laporan
-        GROUP BY YEARWEEK(created_at)
-        ORDER BY label
-      `;
-    } else {
-      query = `
-        SELECT DATE_FORMAT(created_at, '%Y-%m') label, COUNT(*) total
-        FROM laporan
-        GROUP BY DATE_FORMAT(created_at, '%Y-%m')
-        ORDER BY label
-      `;
+        ORDER BY DATE(created_at)
+      `);
+      rows = r;
     }
 
-    const [rows] = await db.query(query);
+    // ================= MINGGUAN =================
+    else if (mode === "mingguan") {
+      const [r] = await db.query(`
+        SELECT
+          YEARWEEK(created_at, 1) AS week,
+          MIN(DATE(created_at)) AS start_date,
+          MAX(DATE(created_at)) AS end_date,
+          COUNT(*) AS total
+        FROM laporan
+        GROUP BY YEARWEEK(created_at, 1)
+        ORDER BY week
+      `);
+      rows = r;
+    }
+
+    // ================= BULANAN =================
+    else if (mode === "bulanan") {
+      const [r] = await db.query(`
+        SELECT
+          DATE_FORMAT(created_at, '%Y-%m-01') AS label,
+          COUNT(*) AS total
+        FROM laporan
+        GROUP BY YEAR(created_at), MONTH(created_at)
+        ORDER BY YEAR(created_at), MONTH(created_at)
+      `);
+      rows = r;
+    }
+
     return Response.json(rows);
   } catch (err) {
-    console.error("GRAFIK ERROR:", err);
+    console.error("STATISTIK ERROR:", err);
     return Response.json([], { status: 500 });
   }
 }

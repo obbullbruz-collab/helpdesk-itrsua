@@ -72,6 +72,35 @@ export async function POST(req) {
       ]
     );
 
+
+        // ================= TELEGRAM (OPTIONAL) =================
+    try {
+      const [teknisi] = await db.query(
+        "SELECT username, telegram_chat_id FROM users WHERE role = 'teknisi' AND telegram_chat_id IS NOT NULL"
+      );
+
+      if (teknisi.length) {
+        const link = `http://localhost:3000/teknisi`;
+        const text = `📢 *Laporan Baru Masuk*
+
+👤 User: ${namaUser}
+📝 Judul: ${judul}
+📄 Deskripsi: ${deskripsi}
+📍 Lokasi: ${lokasi}
+⚠️ Prioritas: ${prioritas}
+
+🔗 Cek: ${link}`;
+
+        const imageUrl = fileName
+          ? `http://localhost:3000/uploads/${fileName}`
+          : null;
+
+        await sendToTeknisi(teknisi, text, imageUrl);
+      }
+    } catch (tgErr) {
+      console.error("TELEGRAM ERROR (DIABAIKAN):", tgErr);
+    }
+
     // ================= DONE =================
     return Response.json({ success: true });
   } catch (err) {

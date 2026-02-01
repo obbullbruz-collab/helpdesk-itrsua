@@ -27,7 +27,7 @@ export default function TeknisiPage() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState("harian");
 
-  // ================= FETCH LAPORAN =================
+  /* ================= FETCH LAPORAN ================= */
   const fetchLaporan = async () => {
     try {
       const res = await fetch("/api/teknisi/laporan");
@@ -44,7 +44,7 @@ export default function TeknisiPage() {
     }
   };
 
-  // ================= FETCH GRAFIK =================
+  /* ================= FETCH GRAFIK ================= */
   const fetchChart = async (m = mode) => {
     try {
       const res = await fetch(`/api/teknisi/statistik?mode=${m}`);
@@ -55,7 +55,7 @@ export default function TeknisiPage() {
     }
   };
 
-  // ================= INIT =================
+  /* ================= INIT ================= */
   useEffect(() => {
     const init = async () => {
       setLoading(true);
@@ -70,7 +70,7 @@ export default function TeknisiPage() {
     fetchChart(mode);
   }, [mode]);
 
-  // ================= UPDATE =================
+  /* ================= UPDATE ================= */
   const handleUpdate = async (id, status, pic, estimasi, komentar) => {
     try {
       const res = await fetch(`/api/laporan/${id}`, {
@@ -91,24 +91,31 @@ export default function TeknisiPage() {
 
   if (loading) return <p className="p-6">Memuat...</p>;
 
-  // ================= FILTER =================
-  const baru = laporan.filter(
-    (l) => l.status?.toLowerCase() === "baru"
-  );
-  const proses = laporan.filter(
-    (l) => l.status?.toLowerCase() === "diproses"
-  );
-  const selesai = laporan.filter(
-    (l) => l.status?.toLowerCase() === "selesai"
-  );
+  /* ================= FILTER STATUS ================= */
+  const baru = laporan.filter((l) => l.status?.toLowerCase() === "baru");
+  const proses = laporan.filter((l) => l.status?.toLowerCase() === "diproses");
+  const selesai = laporan.filter((l) => l.status?.toLowerCase() === "selesai");
 
-  // ================= GRAFIK =================
-  const labels = chart.map((c) =>
-    new Date(c.label).toLocaleDateString("id-ID", {
+  /* ================= LABEL GRAFIK ================= */
+  const labels = chart.map((c) => {
+    if (mode === "mingguan") {
+      const start = new Date(c.start_date).toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+      });
+      const end = new Date(c.end_date).toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+      });
+      return `${start} – ${end}`;
+    }
+
+    return new Date(c.label).toLocaleDateString("id-ID", {
       day: "2-digit",
       month: "short",
-    })
-  );
+    });
+  });
+
   const values = chart.map((c) => c.total);
 
   return (
@@ -172,7 +179,7 @@ export default function TeknisiPage() {
   );
 }
 
-// ================= SECTION =================
+/* ================= SECTION ================= */
 function Section({ title, items, onUpdate }) {
   return (
     <div className="mb-10">
@@ -182,34 +189,27 @@ function Section({ title, items, onUpdate }) {
           <p className="text-gray-400 text-sm">Tidak ada data</p>
         )}
         {items.map((item) => (
-          <LaporanCard
-            key={item.id}
-            item={item}
-            onUpdate={onUpdate}
-          />
+          <LaporanCard key={item.id} item={item} onUpdate={onUpdate} />
         ))}
       </div>
     </div>
   );
 }
 
-// ================= CARD =================
+/* ================= CARD ================= */
 function LaporanCard({ item, onUpdate }) {
   const [status, setStatus] = useState(item.status || "Baru");
   const [pic, setPic] = useState(item.pic || "");
   const [estimasi, setEstimasi] = useState(item.estimasi || "");
   const [komentar, setKomentar] = useState(item.komentar || "");
 
-  // ✅ FIX GAMBAR (CLOUDINARY LANGSUNG)
   const img =
-    typeof item.gambar === "string" &&
-    item.gambar.startsWith("http")
+    typeof item.gambar === "string" && item.gambar.startsWith("http")
       ? item.gambar
       : null;
 
   return (
     <div className="border rounded p-4 flex gap-4 bg-yellow-50">
-      {/* IMAGE */}
       <div className="w-40 h-32 bg-white border flex items-center justify-center overflow-hidden">
         {img ? (
           <img
@@ -218,13 +218,10 @@ function LaporanCard({ item, onUpdate }) {
             className="w-full h-full object-cover"
           />
         ) : (
-          <span className="text-gray-400 text-sm">
-            Tidak ada gambar
-          </span>
+          <span className="text-gray-400 text-sm">Tidak ada gambar</span>
         )}
       </div>
 
-      {/* CONTENT */}
       <div className="flex-1">
         <h3 className="font-bold">{item.judul}</h3>
 
