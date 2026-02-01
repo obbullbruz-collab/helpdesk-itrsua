@@ -4,12 +4,13 @@ import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
+console.log("DB URL:", process.env.DATABASE_URL);
 export async function POST(request) {
   try {
     const { username, password } = await request.json();
 
     const [rows] = await db.query(
-      "SELECT * FROM users WHERE username = ? LIMIT 1",
+      "SELECT * FROM users WHERE username = ?",
       [username]
     );
 
