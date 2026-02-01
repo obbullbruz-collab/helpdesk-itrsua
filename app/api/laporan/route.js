@@ -1,13 +1,21 @@
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 import { db } from "@/lib/db";
 import jwt from "jsonwebtoken";
+import path from "path";
+import fs from "fs/promises";
 import { sendToTeknisi } from "@/lib/telegram";
 
 export async function POST(req) {
   try {
     // ================= AUTH =================
-    const token = req.cookies.get("token")?.value;
+    const cookie = req.headers.get("cookie") || "";
+    const token = cookie
+      .split("; ")
+      .find((c) => c.startsWith("token="))
+      ?.split("=")[1];
+
     if (!token) {
       return Response.json({ message: "Unauthorized" }, { status: 401 });
     }
@@ -29,10 +37,7 @@ export async function POST(req) {
     const deskripsi = formData.get("deskripsi");
     const kategori = formData.get("kategori") || "";
     const lokasi = formData.get("lokasi") || "";
-
-    // 🔥 FIX UTAMA
     const prioritas = formData.get("prioritas") || "Sedang";
-
     const gambar = formData.get("image");
 
     if (!judul || !deskripsi) {
@@ -42,7 +47,7 @@ export async function POST(req) {
       );
     }
 
-    // ================= FILE =================
+    // ================= FILE UPLOAD (FIX 404) =================
     let fileName = null;
 
     if (gambar && typeof gambar === "object" && gambar.size > 0) {
@@ -52,12 +57,15 @@ export async function POST(req) {
       const ext = gambar.name.split(".").pop();
       fileName = `${Date.now()}.${ext}`;
 
-      const fs = await import("fs/promises");
-      await fs.mkdir("./public/uploads", { recursive: true });
-      await fs.writeFile(`./public/uploads/${fileName}`, buffer);
+      // 🔥 PATH PALING BENAR UNTUK NEXT + RAILWAY
+      const uploadDir = path.join(process.cwd(), "public", "uploads");
+      await fs.mkdir(uploadDir, { recursive: true });
+
+      const filePath = path.join(uploadDir, fileName);
+      await fs.writeFile(filePath, buffer);
     }
 
-    // ================= INSERT (WAJIB BERHASIL) =================
+    // ================= INSERT DB =================
     await db.query(
       `INSERT INTO laporan
         (user_id, judul, deskripsi, kategori, prioritas, lokasi, gambar, status)
@@ -72,7 +80,10 @@ export async function POST(req) {
       );
 
       if (teknisi.length) {
-        const link = `http://localhost:3000/teknisi`;
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+        const link = `${baseUrl}/teknisi`;
+        const imageUrl = fileName ? `${baseUrl}/uploads/${fileName}` : null;
+
         const text = `📢 *Laporan Baru Masuk*
 
 👤 User: ${namaUser}
@@ -82,10 +93,6 @@ export async function POST(req) {
 ⚠️ Prioritas: ${prioritas}
 
 🔗 Cek: ${link}`;
-
-        const imageUrl = fileName
-          ? `http://localhost:3000/uploads/${fileName}`
-          : null;
 
         await sendToTeknisi(teknisi, text, imageUrl);
       }
