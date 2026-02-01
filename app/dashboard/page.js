@@ -1,138 +1,97 @@
 "use client";
-export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from "react";
 
 export default function DashboardUser() {
-  const [laporan, setLaporan] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [laporan, setLaporan] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const r = await fetch("/api/laporan/user", {
-          method: "GET",
-          credentials: "include", // cookie auth
-          cache: "no-store",      // 🔥 PALING PENTING
+        const res = await fetch("/api/laporan/user", {
+          credentials: "include",
+          cache: "no-store",
         });
 
-        if (!r.ok) {
-          throw new Error("Gagal mengambil data laporan");
+        if (!res.ok) {
+          throw new Error("Fetch gagal");
         }
 
-        const d = await r.json();
-        setLaporan(Array.isArray(d) ? d : []);
+        const data = await res.json();
+        console.log("DATA DARI API:", data);
+
+        setLaporan(data);
       } catch (err) {
-        console.error("DASHBOARD USER ERROR:", err);
-        setLaporan([]);
-      } finally {
-        setLoading(false);
+        console.error(err);
+        setError(err.message);
       }
     };
 
     load();
   }, []);
 
-  const hitungDurasi = (created, updated, status) => {
-    const start = new Date(created);
-    const end =
-      status === "Selesai" && updated ? new Date(updated) : new Date();
-
-    const diffMs = end - start;
-    const menit = Math.floor(diffMs / 60000);
-    const jam = Math.floor(menit / 60);
-    const hari = Math.floor(jam / 24);
-
-    if (hari > 0) return `${hari} hari ${jam % 24} jam`;
-    if (jam > 0) return `${jam} jam ${menit % 60} menit`;
-    return `${menit} menit`;
-  };
-
-  if (loading) {
-    return <p className="p-6">Memuat...</p>;
+  // ===== LOADING =====
+  if (laporan === null && !error) {
+    return <div style={{ padding: 20 }}>Loading dashboard...</div>;
   }
 
-  return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold">Dashboard User</h1>
-      <p className="text-gray-600 mb-6">
-        Riwayat laporan yang pernah kamu kirim
-      </p>
-
-      {laporan.length === 0 && (
-        <p className="text-gray-500">Belum ada laporan.</p>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {laporan.map((l) => {
-          const img = l.gambar
-            ? `/uploads/${l.gambar}`
-            : null;
-
-          let border = "border-gray-300";
-          if (l.status === "Selesai") border = "border-green-500";
-          if (l.status === "Diproses") border = "border-yellow-500";
-          if (l.status === "Baru") border = "border-blue-500";
-
-          return (
-            <div
-              key={l.id}
-              className={`border-l-4 ${border} bg-white rounded shadow p-4 flex gap-4`}
-            >
-              <div className="w-28 h-28 bg-gray-100 flex items-center justify-center rounded overflow-hidden">
-                {img ? (
-                  <img
-                    src={img}
-                    alt={l.judul}
-                    className="object-cover w-full h-full"
-                    onError={(e) => {
-                      e.currentTarget.onerror = null;
-                      e.currentTarget.src = "/no-image.png";
-                    }}
-                  />
-                ) : (
-                  <span className="text-xs text-gray-400">No Image</span>
-                )}
-              </div>
-
-              <div className="flex-1">
-                <div className="flex justify-between items-start">
-                  <h2 className="font-semibold text-lg">{l.judul}</h2>
-                  <span className="text-xs px-2 py-1 rounded bg-gray-100">
-                    {l.status}
-                  </span>
-                </div>
-
-                <p className="text-xs text-gray-500">
-                  {new Date(l.created_at).toLocaleString("id-ID")}
-                </p>
-
-                <p className="text-sm mt-1">
-                  <b>Kategori:</b> {l.kategori || "-"} <br />
-                  <b>Prioritas:</b> {l.prioritas || "-"}
-                </p>
-
-                <p className="text-sm mt-1 text-gray-700">
-                  <b>Deskripsi:</b> {l.deskripsi || "-"}
-                </p>
-
-                <div className="text-sm mt-2">
-                  <p>
-                    <b>PIC:</b> {l.pic || "-"}
-                  </p>
-                  <p>
-                    <b>Komentar Teknisi:</b> {l.komentar || "-"}
-                  </p>
-                  <p>
-                    <b>Lama pengerjaan:</b>{" "}
-                    {hitungDurasi(l.created_at, l.updated_at, l.status)}
-                  </p>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+  // ===== ERROR =====
+  if (error) {
+    return (
+      <div style={{ padding: 20, color: "red" }}>
+        Error: {error}
       </div>
+    );
+  }
+
+  // ===== TIDAK ADA DATA =====
+  if (!Array.isArray(laporan) || laporan.length === 0) {
+    return (
+      <div style={{ padding: 20 }}>
+        <h2>Dashboard User</h2>
+        <p>Tidak ada laporan.</p>
+      </div>
+    );
+  }
+
+  // ===== DATA ADA (PASTI RENDER) =====
+  return (
+    <div style={{ padding: 20 }}>
+      <h1>Dashboard User</h1>
+
+      {laporan.map((l) => (
+        <div
+          key={`laporan-${l.id}`}
+          style={{
+            border: "1px solid #ccc",
+            marginBottom: 12,
+            padding: 12,
+          }}
+        >
+          <h3>{l.judul}</h3>
+          <p><b>Status:</b> {l.status}</p>
+          <p><b>Kategori:</b> {l.kategori}</p>
+          <p><b>Prioritas:</b> {l.prioritas}</p>
+          <p><b>Deskripsi:</b> {l.deskripsi}</p>
+
+          {l.gambar && (
+            <img
+              src={`/uploads/${l.gambar}`}
+              alt={l.judul}
+              style={{
+                width: 200,
+                marginTop: 8,
+                border: "1px solid #ddd",
+              }}
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = "/no-image.png";
+              }}
+            />
+          )}
+        </div>
+      ))}
     </div>
   );
 }
