@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from "react";
 
@@ -11,17 +12,18 @@ export default function DashboardUser() {
       try {
         const r = await fetch("/api/laporan/user", {
           method: "GET",
-          credentials: "include", // 🔥 WAJIB agar cookie token terkirim
+          credentials: "include", // cookie auth
+          cache: "no-store",      // 🔥 PALING PENTING
         });
 
         if (!r.ok) {
-          throw new Error("Gagal ambil data laporan");
+          throw new Error("Gagal mengambil data laporan");
         }
 
         const d = await r.json();
         setLaporan(Array.isArray(d) ? d : []);
-      } catch (e) {
-        console.error("DASHBOARD USER ERROR:", e);
+      } catch (err) {
+        console.error("DASHBOARD USER ERROR:", err);
         setLaporan([]);
       } finally {
         setLoading(false);
@@ -63,7 +65,9 @@ export default function DashboardUser() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {laporan.map((l) => {
-          const img = l.gambar ? `/uploads/${l.gambar}` : null;
+          const img = l.gambar
+            ? `/uploads/${l.gambar}`
+            : null;
 
           let border = "border-gray-300";
           if (l.status === "Selesai") border = "border-green-500";
@@ -79,8 +83,8 @@ export default function DashboardUser() {
                 {img ? (
                   <img
                     src={img}
-                    className="object-cover w-full h-full"
                     alt={l.judul}
+                    className="object-cover w-full h-full"
                     onError={(e) => {
                       e.currentTarget.onerror = null;
                       e.currentTarget.src = "/no-image.png";
