@@ -5,19 +5,20 @@ import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
-// cek ENV
-console.log("DB URL:", process.env.DATABASE_URL);
-
-export async function POST(request) {
+export async function POST(req) {
   try {
-    // 🔥 TEST DB PALING PENTING
-    await db.query("SELECT 1");
-    console.log("DB CONNECT OK");
+    const { username, password } = await req.json();
 
-    const { username, password } = await request.json();
+    if (!username || !password) {
+      return Response.json(
+        { message: "Username dan password wajib diisi" },
+        { status: 400 }
+      );
+    }
 
+    // ===== CEK USER =====
     const [rows] = await db.query(
-      "SELECT * FROM users WHERE username = ?",
+      "SELECT id, username, password, role FROM users WHERE username = ? LIMIT 1",
       [username]
     );
 
@@ -29,8 +30,9 @@ export async function POST(request) {
     }
 
     const user = rows[0];
-    const isMatch = await bcrypt.compare(password, user.password);
 
+    // ===== CEK PASSWORD =====
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return Response.json(
         { message: "Password salah" },
@@ -38,24 +40,28 @@ export async function POST(request) {
       );
     }
 
+    // ===== BUAT JWT =====
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      {
+        id: user.id,
+        role: user.role,
+      },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
 
-    const res = Response.json(
-      {
-        success: true,
-        user: {
-          id: user.id,
-          username: user.username,
-          role: user.role,
-        },
+    // ===== RESPONSE =====
+    const res = Response.json({
+      success: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
       },
-      { status: 200 }
-    );
+    });
 
+    // 🔥🔥🔥 INI KUNCI UTAMA 🔥🔥🔥
+    // TANPA Path=/  -> GET /api/laporan/user = []
     res.headers.append(
       "Set-Cookie",
       `token=${token}; HttpOnly; Path=/; SameSite=Lax`
