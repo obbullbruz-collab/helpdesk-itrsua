@@ -9,19 +9,16 @@ export default function DashboardUser() {
   useEffect(() => {
     const load = async () => {
       try {
-        const r = await fetch("/api/laporan/me");
+        const r = await fetch("/api/laporan/user", {
+          method: "GET",
+          credentials: "include", // 🔥 WAJIB agar cookie token terkirim
+        });
 
         if (!r.ok) {
-          throw new Error("Gagal ambil data");
+          throw new Error("Gagal ambil data laporan");
         }
 
-        const text = await r.text();
-        if (!text) {
-          setLaporan([]);
-          return;
-        }
-
-        const d = JSON.parse(text);
+        const d = await r.json();
         setLaporan(Array.isArray(d) ? d : []);
       } catch (e) {
         console.error("DASHBOARD USER ERROR:", e);
@@ -36,7 +33,8 @@ export default function DashboardUser() {
 
   const hitungDurasi = (created, updated, status) => {
     const start = new Date(created);
-    const end = status === "Selesai" && updated ? new Date(updated) : new Date();
+    const end =
+      status === "Selesai" && updated ? new Date(updated) : new Date();
 
     const diffMs = end - start;
     const menit = Math.floor(diffMs / 60000);
@@ -48,7 +46,9 @@ export default function DashboardUser() {
     return `${menit} menit`;
   };
 
-  if (loading) return <p className="p-6">Memuat...</p>;
+  if (loading) {
+    return <p className="p-6">Memuat...</p>;
+  }
 
   return (
     <div className="p-6">
@@ -56,6 +56,10 @@ export default function DashboardUser() {
       <p className="text-gray-600 mb-6">
         Riwayat laporan yang pernah kamu kirim
       </p>
+
+      {laporan.length === 0 && (
+        <p className="text-gray-500">Belum ada laporan.</p>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {laporan.map((l) => {
@@ -76,6 +80,7 @@ export default function DashboardUser() {
                   <img
                     src={img}
                     className="object-cover w-full h-full"
+                    alt={l.judul}
                     onError={(e) => {
                       e.currentTarget.onerror = null;
                       e.currentTarget.src = "/no-image.png";
@@ -99,8 +104,8 @@ export default function DashboardUser() {
                 </p>
 
                 <p className="text-sm mt-1">
-                  <b>Kategori:</b> {l.kategori} <br />
-                  <b>Prioritas:</b> {l.prioritas}
+                  <b>Kategori:</b> {l.kategori || "-"} <br />
+                  <b>Prioritas:</b> {l.prioritas || "-"}
                 </p>
 
                 <p className="text-sm mt-1 text-gray-700">
