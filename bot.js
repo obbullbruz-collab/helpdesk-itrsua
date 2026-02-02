@@ -39,8 +39,8 @@ bot.onText(/\/start/, async (msg) => {
   await bot.sendMessage(
     msg.chat.id,
     `👋 *Helpdesk IT Bot*
-
-Perintah:
+Selamat datang! Gunakan bot ini untuk membuat akun Helpdesk IT.
+Gunakan Perintah berikut:
 • *daftar* → buat akun
 • *batal* → batalkan proses`,
     { parse_mode: "Markdown" }
@@ -126,12 +126,31 @@ bot.on("message", async (msg) => {
         return bot.sendMessage(chatId, "❌ Password minimal 4 karakter.");
       }
 
+      // CEK LAGI USERNAME (ANTI DUPLIKAT FINAL)
+      const [exist] = await db.query(
+        "SELECT id FROM users WHERE username=? LIMIT 1",
+        [session.username]
+      );
+
+      if (exist.length) {
+        delete sessions[chatId];
+        await db.query(
+          "UPDATE users SET telegram_step=NULL WHERE telegram_chat_id=?",
+          [chatId]
+        );
+        return bot.sendMessage(
+          chatId,
+          "❌ Username sudah dipakai.\nKetik *daftar* untuk ulangi.",
+          { parse_mode: "Markdown" }
+        );
+      }
+
       const hash = await bcrypt.hash(text, 10);
 
       await db.query(
         `UPDATE users
-         SET username=?, password=?, telegram_step=NULL
-         WHERE telegram_chat_id=?`,
+        SET username=?, password=?, telegram_step=NULL
+        WHERE telegram_chat_id=?`,
         [session.username, hash, chatId]
       );
 
@@ -142,6 +161,7 @@ bot.on("message", async (msg) => {
         "✅ Akun berhasil dibuat.\nSilakan login di web."
       );
     }
+
   } catch (err) {
     console.error("BOT ERROR:", err);
     return bot.sendMessage(
