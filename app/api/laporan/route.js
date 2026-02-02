@@ -7,7 +7,7 @@ import cloudinary from "@/lib/cloudinary";
 
 export async function POST(req) {
   try {
-    // ================= AUTH =================
+    /* ================= AUTH ================= */
     const cookie = req.headers.get("cookie") || "";
     const token = cookie
       .split("; ")
@@ -21,7 +21,7 @@ export async function POST(req) {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const userId = decoded.id;
 
-    // ================= FORM =================
+    /* ================= FORM ================= */
     const formData = await req.formData();
 
     const judul = formData.get("judul");
@@ -38,7 +38,7 @@ export async function POST(req) {
       );
     }
 
-    // ================= UPLOAD CLOUDINARY =================
+    /* ================= UPLOAD CLOUDINARY ================= */
     let imageUrl = null;
 
     if (gambar && typeof gambar === "object" && gambar.size > 0) {
@@ -48,19 +48,19 @@ export async function POST(req) {
 
       const uploadResult = await cloudinary.uploader.upload(
         `data:image/${ext};base64,${buffer.toString("base64")}`,
-        {
-          folder: "laporan",
-        }
+        { folder: "laporan" }
       );
 
-      imageUrl = uploadResult.secure_url; // 🔥 URL FINAL
+      imageUrl = uploadResult.secure_url;
     }
 
-    // ================= INSERT DB =================
-    await db.query(
-      `INSERT INTO laporan
-        (user_id, judul, deskripsi, kategori, prioritas, lokasi, gambar, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'Baru')`,
+    /* ================= INSERT DB ================= */
+    const [result] = await db.query(
+      `
+      INSERT INTO laporan
+      (user_id, judul, deskripsi, kategori, prioritas, lokasi, gambar, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'Baru')
+      `,
       [
         userId,
         judul,
@@ -68,41 +68,29 @@ export async function POST(req) {
         kategori,
         prioritas,
         lokasi,
-        imageUrl, // URL Cloudinary
+        imageUrl,
       ]
     );
 
+    const laporanId = result.insertId;
 
-        // ================= TELEGRAM (OPTIONAL) =================
+    /* ================= 🔥 TRIGGER BOT (INI KUNCI) ================= */
     try {
-      const [teknisi] = await db.query(
-        "SELECT username, telegram_chat_id FROM users WHERE role = 'teknisi' AND telegram_chat_id IS NOT NULL"
-      );
-
-      if (teknisi.length) {
-        const link = `http://localhost:3000/teknisi`;
-        const text = `📢 *Laporan Baru Masuk*
-
-👤 User: ${namaUser}
-📝 Judul: ${judul}
-📄 Deskripsi: ${deskripsi}
-📍 Lokasi: ${lokasi}
-⚠️ Prioritas: ${prioritas}
-
-🔗 Cek: ${link}`;
-
-        const imageUrl = fileName
-          ? `http://localhost:3000/uploads/${fileName}`
-          : null;
-
-        await sendToTeknisi(teknisi, text, imageUrl);
-      }
-    } catch (tgErr) {
-      console.error("TELEGRAM ERROR (DIABAIKAN):", tgErr);
+      await fetch(`${process.env.BOT_BASE_URL}/notify-teknisi`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ laporan_id: laporanId }),
+      });
+    } catch (err) {
+      console.error("GAGAL PANGGIL BOT:", err);
+      // sengaja TIDAK throw → laporan tetap tersimpan
     }
 
-    // ================= DONE =================
-    return Response.json({ success: true });
+    /* ================= DONE ================= */
+    return Response.json({
+      success: true,
+      laporan_id: laporanId,
+    });
   } catch (err) {
     console.error("API LAPORAN ERROR:", err);
     return Response.json(

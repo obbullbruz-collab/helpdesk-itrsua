@@ -5,8 +5,8 @@ import express from "express";
 
 /* ================= ENV ================= */
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const WEBHOOK_URL = process.env.WEBHOOK_URL;
-const WEB_BASE_URL = process.env.WEB_BASE_URL; // https://helpdesk.domain.com
+const WEBHOOK_URL = process.env.WEBHOOK_URL; // https://xxx.up.railway.app
+const WEB_BASE_URL = process.env.WEB_BASE_URL; // https://web-kamu.com
 const PORT = process.env.PORT || 8080;
 
 /* ================= BOT & SERVER ================= */
@@ -32,34 +32,34 @@ const db = await mysql.createPool(process.env.DATABASE_URL);
 const sessions = {};
 
 /* ================= HELPER ================= */
-async function safeSend(chatId, text, options = {}) {
+async function safeSend(chatId, text, opt = {}) {
   if (!chatId) return;
   try {
-    await bot.sendMessage(chatId, text, options);
+    await bot.sendMessage(chatId, text, opt);
   } catch (e) {
     console.error("SEND ERROR:", e.message);
   }
 }
 
 /* ================= NOTIF USER ================= */
-async function notifUser(chatId, data) {
+async function notifUser(chatId, d) {
   const msg = `
 📢 *Update Laporan Helpdesk*
 
-📝 *Judul:* ${data.judul}
-📄 *Deskripsi:* ${data.deskripsi}
-👤 *PIC:* ${data.pic || "-"}
-⏱️ *Estimasi:* ${data.estimasi || "-"}
-💬 *Komentar Teknisi:* ${data.komentar || "-"}
-📌 *Status:* *${data.status}*
+📝 *Judul:* ${d.judul}
+📄 *Deskripsi:* ${d.deskripsi}
+👤 *PIC:* ${d.pic || "-"}
+⏱️ *Estimasi:* ${d.estimasi || "-"}
+💬 *Komentar Teknisi:* ${d.komentar || "-"}
+📌 *Status:* *${d.status}*
 
 Terima kasih telah menunggu 🙏
-  `;
+`;
   await safeSend(chatId, msg, { parse_mode: "Markdown" });
 }
 
-/* ================= NOTIF TEKNISI (DENGAN GAMBAR) ================= */
-async function notifTeknisi(data) {
+/* ================= NOTIF TEKNISI (+ GAMBAR) ================= */
+async function notifTeknisi(d) {
   const [teknisi] = await db.query(
     "SELECT telegram_chat_id FROM users WHERE role='teknisi' AND telegram_chat_id IS NOT NULL"
   );
@@ -68,21 +68,21 @@ async function notifTeknisi(data) {
   const caption = `
 🛠️ *Laporan Helpdesk Baru*
 
-🆔 *ID:* ${data.id}
-👤 *Pelapor:* ${data.pelapor}
-📝 *Judul:* ${data.judul}
-📄 *Deskripsi:* ${data.deskripsi}
-📍 *Lokasi:* ${data.lokasi || "-"}
-⚠️ *Prioritas:* ${data.prioritas || "-"}
-📌 *Status:* *${data.status}*
+🆔 *ID:* ${d.id}
+👤 *Pelapor:* ${d.pelapor}
+📝 *Judul:* ${d.judul}
+📄 *Deskripsi:* ${d.deskripsi}
+📍 *Lokasi:* ${d.lokasi || "-"}
+⚠️ *Prioritas:* ${d.prioritas || "-"}
+📌 *Status:* *${d.status}*
 
-🔗 ${WEB_BASE_URL}/laporan/${data.id}
-  `;
+🔗 ${WEB_BASE_URL}/laporan/${d.id}
+`;
 
   for (const t of teknisi) {
     try {
-      if (data.gambar) {
-        await bot.sendPhoto(t.telegram_chat_id, data.gambar, {
+      if (d.gambar) {
+        await bot.sendPhoto(t.telegram_chat_id, d.gambar, {
           caption,
           parse_mode: "Markdown",
         });
@@ -97,6 +97,38 @@ async function notifTeknisi(data) {
     }
   }
 }
+
+/* ================= API TRIGGER DARI WEB ================= */
+/* DIPANGGIL SETELAH WEB INSERT LAPORAN */
+app.post("/notify-teknisi", async (req, res) => {
+  try {
+    const { laporan_id } = req.body;
+    if (!laporan_id) {
+      return res.status(400).json({ error: "laporan_id wajib" });
+    }
+
+    const [[lap]] = await db.query(
+      `
+      SELECT l.*, u.username AS pelapor
+      FROM laporan l
+      JOIN users u ON u.id = l.user_id
+      WHERE l.id = ?
+      LIMIT 1
+      `,
+      [laporan_id]
+    );
+
+    if (!lap) {
+      return res.status(404).json({ error: "laporan tidak ditemukan" });
+    }
+
+    await notifTeknisi(lap);
+    return res.json({ success: true });
+  } catch (e) {
+    console.error("NOTIFY TEKNISI ERROR:", e);
+    return res.status(500).json({ error: "server error" });
+  }
+});
 
 /* ================= /start ================= */
 bot.onText(/\/start/, async (msg) => {
@@ -121,8 +153,7 @@ Akun Telegram terhubung ✅
 Perintah:
 • *daftar*
 • *reset*
-• *testnotif*
-• *notiftek*`,
+• *testnotif*`,
     { parse_mode: "Markdown" }
   );
 });
@@ -139,35 +170,26 @@ bot.on("message", async (msg) => {
       return notifUser(chatId, {
         judul: "Tes",
         deskripsi: "Contoh",
-        pic: "Oci",
+        pic: "Teknisi",
         estimasi: "10 menit",
         komentar: "Dicek",
         status: "Diproses",
       });
     }
 
-    /* ===== NOTIF TEKNISI ===== */
-    if (text === "notiftek") {
-      const [[lap]] = await db.query(`
-        SELECT l.*, u.username AS pelapor
-        FROM laporan l
-        JOIN users u ON u.id=l.user_id
-        ORDER BY l.id DESC LIMIT 1
-      `);
-      if (!lap) return safeSend(chatId, "❌ Tidak ada laporan.");
-      await notifTeknisi(lap);
-      return safeSend(chatId, "✅ Notifikasi teknisi terkirim.");
-    }
-
-    /* ===== RESET PASSWORD ===== */
+    /* ===== RESET PASSWORD (TRIGGER DARI WEB) ===== */
     if (text === "reset") {
-      const [[req]] = await db.query(`
-        SELECT pr.id, u.id user_id
+      const [[req]] = await db.query(
+        `
+        SELECT pr.id, u.id AS user_id
         FROM password_resets pr
         JOIN users u ON u.telegram_chat_id=?
         WHERE pr.used=0
-        ORDER BY pr.id DESC LIMIT 1
-      `, [chatId]);
+        ORDER BY pr.id DESC
+        LIMIT 1
+        `,
+        [chatId]
+      );
 
       if (!req) return safeSend(chatId, "❌ Tidak ada permintaan reset.");
 
@@ -184,7 +206,8 @@ bot.on("message", async (msg) => {
     if (!s) return;
 
     if (s.step === "reset_pass") {
-      if (raw.length < 4) return safeSend(chatId, "❌ Min 4 karakter.");
+      if (raw.length < 4) return safeSend(chatId, "❌ Minimal 4 karakter.");
+
       const hash = await bcrypt.hash(raw, 10);
       await db.query("UPDATE users SET password=? WHERE id=?", [
         hash,
@@ -193,11 +216,12 @@ bot.on("message", async (msg) => {
       await db.query("UPDATE password_resets SET used=1 WHERE id=?", [
         s.resetId,
       ]);
+
       delete sessions[chatId];
       return safeSend(chatId, "✅ Password berhasil direset.");
     }
 
-    /* ===== DAFTAR ===== */
+    /* ===== DAFTAR USER ===== */
     if (text === "daftar") {
       sessions[chatId] = { step: "username" };
       return safeSend(chatId, "Masukkan username:");
