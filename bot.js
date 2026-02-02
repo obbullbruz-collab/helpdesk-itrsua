@@ -22,31 +22,19 @@ const db = await mysql.createPool({
 const sessions = {};
 
 /* ================= /start ================= */
+/* ❌ TIDAK ADA QUERY DB DI SINI */
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
 
-  try {
-    // PASTIKAN ROW USER SELALU ADA
-    await db.query(
-      `INSERT INTO users (telegram_chat_id, role)
-       VALUES (?, 'user')
-       ON DUPLICATE KEY UPDATE telegram_chat_id = telegram_chat_id`,
-      [chatId]
-    );
-
-    await bot.sendMessage(
-      chatId,
-      `👋 *Helpdesk IT Bot*
+  await bot.sendMessage(
+    chatId,
+    `👋 *Helpdesk IT Bot*
 
 Perintah:
 • *daftar* → buat akun
 • *batal* → batalkan proses`,
-      { parse_mode: "Markdown" }
-    );
-  } catch (err) {
-    console.error("START ERROR:", err);
-    bot.sendMessage(chatId, "⚠️ Terjadi kesalahan database.");
-  }
+    { parse_mode: "Markdown" }
+  );
 });
 
 /* ================= MESSAGE HANDLER ================= */
@@ -67,6 +55,20 @@ bot.on("message", async (msg) => {
 
     /* ===== DAFTAR ===== */
     if (text.toLowerCase() === "daftar") {
+      // CEK APAKAH USER SUDAH ADA
+      const [rows] = await db.query(
+        "SELECT id FROM users WHERE telegram_chat_id=? LIMIT 1",
+        [chatId]
+      );
+
+      // JIKA BELUM ADA → INSERT BARU
+      if (!rows.length) {
+        await db.query(
+          "INSERT INTO users (telegram_chat_id, role) VALUES (?, 'user')",
+          [chatId]
+        );
+      }
+
       sessions[chatId] = { step: "username" };
 
       await db.query(
