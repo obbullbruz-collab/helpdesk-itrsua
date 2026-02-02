@@ -7,18 +7,18 @@ const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
   polling: true,
 });
 
-console.log("🤖 BOT STEP 2 HIDUP");
+console.log("🤖 BOT FINAL HIDUP");
 
 /* ================= DATABASE ================= */
 const db = await mysql.createPool({
   host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
+  port: process.env.DB_PORT || 3306,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
 });
 
-/* ================= SESSION ================= */
+/* ================= SESSION MEMORY ================= */
 const sessions = {};
 
 /* ================= /start ================= */
@@ -26,8 +26,11 @@ bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
 
   try {
+    // PASTIKAN ROW USER SELALU ADA
     await db.query(
-      "INSERT IGNORE INTO users (telegram_chat_id, role) VALUES (?, 'user')",
+      `INSERT INTO users (telegram_chat_id, role)
+       VALUES (?, 'user')
+       ON DUPLICATE KEY UPDATE telegram_chat_id = telegram_chat_id`,
       [chatId]
     );
 
@@ -35,14 +38,14 @@ bot.onText(/\/start/, async (msg) => {
       chatId,
       `👋 *Helpdesk IT Bot*
 
-Ketik:
+Perintah:
 • *daftar* → buat akun
 • *batal* → batalkan proses`,
       { parse_mode: "Markdown" }
     );
   } catch (err) {
     console.error("START ERROR:", err);
-    bot.sendMessage(chatId, "⚠️ Server error.");
+    bot.sendMessage(chatId, "⚠️ Terjadi kesalahan database.");
   }
 });
 
@@ -52,7 +55,7 @@ bot.on("message", async (msg) => {
   const text = (msg.text || "").trim();
 
   try {
-    // ===== BATAL =====
+    /* ===== BATAL ===== */
     if (text.toLowerCase() === "batal") {
       delete sessions[chatId];
       await db.query(
@@ -62,7 +65,7 @@ bot.on("message", async (msg) => {
       return bot.sendMessage(chatId, "❌ Proses dibatalkan.");
     }
 
-    // ===== DAFTAR =====
+    /* ===== DAFTAR ===== */
     if (text.toLowerCase() === "daftar") {
       sessions[chatId] = { step: "username" };
 
@@ -79,7 +82,7 @@ bot.on("message", async (msg) => {
     const session = sessions[chatId];
     if (!session) return;
 
-    // ===== USERNAME =====
+    /* ===== STEP USERNAME ===== */
     if (session.step === "username") {
       const username = text.toLowerCase();
 
@@ -89,7 +92,10 @@ bot.on("message", async (msg) => {
       );
 
       if (rows.length) {
-        return bot.sendMessage(chatId, "❌ Username sudah dipakai.");
+        return bot.sendMessage(
+          chatId,
+          "❌ Username sudah digunakan. Coba yang lain:"
+        );
       }
 
       session.username = username;
@@ -107,7 +113,7 @@ bot.on("message", async (msg) => {
       );
     }
 
-    // ===== PASSWORD =====
+    /* ===== STEP PASSWORD ===== */
     if (session.step === "password") {
       if (text.length < 4) {
         return bot.sendMessage(chatId, "❌ Password minimal 4 karakter.");
@@ -126,14 +132,14 @@ bot.on("message", async (msg) => {
 
       return bot.sendMessage(
         chatId,
-        "✅ Akun berhasil dibuat.\nSilakan login di web."
+        "✅ Akun berhasil dibuat.\nSilakan login di web Helpdesk IT."
       );
     }
   } catch (err) {
     console.error("BOT ERROR:", err);
     return bot.sendMessage(
       chatId,
-      "⚠️ Server error.\nKetik *daftar* untuk ulangi.",
+      "⚠️ Terjadi kesalahan server.\nKetik *daftar* untuk ulangi.",
       { parse_mode: "Markdown" }
     );
   }
