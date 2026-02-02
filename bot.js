@@ -14,8 +14,6 @@ const app = express();
 app.use(express.json());
 
 bot.setWebHook(`${WEBHOOK_URL}/bot`);
-console.log("🤖 BOT WEBHOOK HIDUP");
-console.log("🌐 WEBHOOK:", `${WEBHOOK_URL}/bot`);
 
 app.post("/bot", (req, res) => {
   bot.processUpdate(req.body);
@@ -23,17 +21,19 @@ app.post("/bot", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log("🚀 Listening on port", PORT);
+  console.log("🚀 Bot running on port", PORT);
 });
 
 /* ================= DATABASE ================= */
 const db = await mysql.createPool(process.env.DATABASE_URL);
 
-/* ================= SESSION (MEMORY) ================= */
+/* ================= SESSION ================= */
 const sessions = {};
 
-/* ================= NOTIFIKASI USER ================= */
+/* ================= NOTIFIKASI ================= */
 async function kirimNotifikasiUser(chatId, data) {
+  if (!chatId) return;
+
   const pesan = `
 📢 *Update Laporan Helpdesk*
 
@@ -47,14 +47,19 @@ async function kirimNotifikasiUser(chatId, data) {
 Terima kasih telah menunggu 🙏
   `;
 
-  await bot.sendMessage(chatId, pesan, {
-    parse_mode: "Markdown",
-  });
+  await bot.sendMessage(chatId, pesan, { parse_mode: "Markdown" });
 }
 
 /* ================= /start ================= */
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
+
+  // SIMPAN CHAT ID USER (INI KUNCI)
+  await db.query(
+    "UPDATE users SET telegram_chat_id=? WHERE username IS NOT NULL AND telegram_chat_id IS NULL",
+    [chatId]
+  );
+
   delete sessions[chatId];
 
   await bot.sendMessage(
@@ -63,8 +68,8 @@ bot.onText(/\/start/, async (msg) => {
 
 Perintah:
 • *daftar* → buat akun
-• *batal* → batalkan proses
-• *testnotif* → tes notifikasi`,
+• *testnotif* → tes notifikasi
+• *updatelaporan* → kirim notifikasi laporan`,
     { parse_mode: "Markdown" }
   );
 });
@@ -76,7 +81,7 @@ bot.on("message", async (msg) => {
   const text = rawText.toLowerCase();
 
   try {
-    /* ===== TEST NOTIFIKASI ===== */
+    /* ===== TEST NOTIF ===== */
     if (text === "testnotif") {
       await kirimNotifikasiUser(chatId, {
         judul: "Gazzz",
@@ -88,6 +93,8 @@ bot.on("message", async (msg) => {
       });
       return;
     }
+
+    /* ===== UPDATE LAPORAN (REAL DB) ===== */
     if (text === "updatelaporan") {
       const [[laporan]] = await db.query(`
         SELECT 
@@ -102,30 +109,29 @@ bot.on("message", async (msg) => {
         JOIN users u ON u.id = l.user_id
         ORDER BY l.id DESC
         LIMIT 1
-    `);
+      `);
 
-    if (!laporan) {
-      return bot.sendMessage(chatId, "❌ Tidak ada laporan.");
-    }
+      if (!laporan) {
+        return bot.sendMessage(chatId, "❌ Tidak ada laporan.");
+      }
 
-    await kirimNotifikasiUser(laporan.telegram_chat_id, {
-      judul: laporan.judul,
-      deskripsi: laporan.deskripsi,
-      pic: laporan.pic || "-",
-      estimasi: laporan.estimasi || "-",
-      komentar: laporan.komentar || "-",
-      status: laporan.status || "Pending",
-    });
+      if (!laporan.telegram_chat_id) {
+        return bot.sendMessage(
+          chatId,
+          "⚠️ User belum terhubung ke Telegram."
+        );
+      }
 
-    return bot.sendMessage(chatId, "✅ Notifikasi laporan terkirim ke user.");
-  }
+      await kirimNotifikasiUser(laporan.telegram_chat_id, {
+        judul: laporan.judul,
+        deskripsi: laporan.deskripsi,
+        pic: laporan.pic || "-",
+        estimasi: laporan.estimasi || "-",
+        komentar: laporan.komentar || "-",
+        status: laporan.status || "Pending",
+      });
 
-
-
-    /* ===== BATAL ===== */
-    if (text === "batal") {
-      delete sessions[chatId];
-      return bot.sendMessage(chatId, "❌ Proses dibatalkan.");
+      return bot.sendMessage(chatId, "✅ Notifikasi laporan terkirim.");
     }
 
     /* ===== DAFTAR ===== */
@@ -139,65 +145,35 @@ bot.on("message", async (msg) => {
     const session = sessions[chatId];
     if (!session) return;
 
-    /* ===== USERNAME ===== */
     if (session.step === "username") {
-      const username = rawText;
-
       const [exist] = await db.query(
         "SELECT id FROM users WHERE username=? LIMIT 1",
-        [username]
+        [rawText]
       );
 
       if (exist.length) {
         delete sessions[chatId];
-        return bot.sendMessage(
-          chatId,
-          "❌ Username sudah digunakan.\nKetik *daftar* untuk ulangi.",
-          { parse_mode: "Markdown" }
-        );
+        return bot.sendMessage(chatId, "❌ Username sudah dipakai.");
       }
 
-      sessions[chatId] = {
-        step: "password",
-        username,
-      };
-
-      return bot.sendMessage(
-        chatId,
-        "Masukkan *password* (min 4 karakter):",
-        { parse_mode: "Markdown" }
-      );
+      sessions[chatId] = { step: "password", username: rawText };
+      return bot.sendMessage(chatId, "Masukkan *password*:");
     }
 
-    /* ===== PASSWORD ===== */
     if (session.step === "password") {
-      if (rawText.length < 4) {
-        return bot.sendMessage(chatId, "❌ Password minimal 4 karakter.");
-      }
-
       const hash = await bcrypt.hash(rawText, 10);
 
       await db.query(
-        "INSERT INTO users (username, password, role) VALUES (?, ?, 'user')",
-        [session.username, hash]
+        "INSERT INTO users (username, password, role, telegram_chat_id) VALUES (?, ?, 'user', ?)",
+        [session.username, hash, chatId]
       );
 
       delete sessions[chatId];
-
-      return bot.sendMessage(
-        chatId,
-        "✅ Akun berhasil dibuat.\nSilakan login di web."
-      );
+      return bot.sendMessage(chatId, "✅ Akun berhasil dibuat.");
     }
   } catch (err) {
     console.error("BOT ERROR:", err);
     delete sessions[chatId];
-
-    return bot.sendMessage(
-      chatId,
-      "⚠️ Terjadi kesalahan server.\nKetik *daftar* untuk ulangi."
-    );
+    return bot.sendMessage(chatId, "⚠️ Terjadi kesalahan server.");
   }
 });
-
-/* ================= END OF FILE ================= */
