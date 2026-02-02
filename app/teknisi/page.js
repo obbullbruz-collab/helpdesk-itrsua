@@ -27,16 +27,12 @@ export default function TeknisiPage() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState("harian");
 
-  // ================= TOKEN =================
-  const getToken = () => {
-    if (typeof window === "undefined") return null;
-    return localStorage.getItem("token");
-  };
-
   // ================= FETCH LAPORAN =================
   const fetchLaporan = async () => {
     try {
-      const res = await fetch("/api/teknisi/laporan");
+      const res = await fetch("/api/teknisi/laporan", {
+        credentials: "include", // 🔥 COOKIE
+      });
       if (!res.ok) return setLaporan([]);
       const data = await res.json();
       setLaporan(Array.isArray(data) ? data : []);
@@ -48,7 +44,9 @@ export default function TeknisiPage() {
   // ================= FETCH GRAFIK =================
   const fetchChart = async (m = mode) => {
     try {
-      const res = await fetch(`/api/teknisi/statistik?mode=${m}`);
+      const res = await fetch(`/api/teknisi/statistik?mode=${m}`, {
+        credentials: "include", // 🔥 COOKIE
+      });
       const data = await res.json();
       setChart(Array.isArray(data) ? data : []);
     } catch {
@@ -70,20 +68,14 @@ export default function TeknisiPage() {
     fetchChart(mode);
   }, [mode]);
 
-  // ================= UPDATE LAPORAN (FIX) =================
+  // ================= UPDATE LAPORAN (COOKIE AUTH) =================
   const handleUpdate = async (id, status, pic, estimasi, komentar) => {
     try {
-      const token = getToken();
-      if (!token) {
-        alert("Token tidak ditemukan, silakan login ulang");
-        return;
-      }
-
       const res = await fetch("/api/laporan/update", {
         method: "POST",
+        credentials: "include", // 🔥 INI KUNCI
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
         },
         body: JSON.stringify({
           laporan_id: id,
@@ -244,8 +236,8 @@ function LaporanCard({ item, onUpdate }) {
         </p>
 
         <p className="text-sm">
-          <b>Kategori:</b> {item.kategori} | <b>Prioritas:</b>{" "}
-          {item.prioritas}
+          <b>Kategori:</b> {item.kategori} |{" "}
+          <b>Prioritas:</b> {item.prioritas}
         </p>
 
         <p className="text-sm mt-1">{item.deskripsi}</p>
