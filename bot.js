@@ -12,7 +12,10 @@ const PORT = process.env.PORT || 8080;
 /* ================= BOT & SERVER ================= */
 const bot = new TelegramBot(TOKEN);
 const app = express();
+
+/* 🔥 WAJIB: BODY PARSER (INI KUNCI) */
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 bot.setWebHook(`${WEBHOOK_URL}/bot`);
 
@@ -41,29 +44,16 @@ async function safeSend(chatId, text, opt = {}) {
   }
 }
 
-/* ================= NOTIF USER ================= */
-async function notifUser(chatId, d) {
-  const msg = `
-📢 *Update Laporan Helpdesk*
-
-📝 *Judul:* ${d.judul}
-📄 *Deskripsi:* ${d.deskripsi}
-👤 *PIC:* ${d.pic || "-"}
-⏱️ *Estimasi:* ${d.estimasi || "-"}
-💬 *Komentar Teknisi:* ${d.komentar || "-"}
-📌 *Status:* *${d.status}*
-
-Terima kasih telah menunggu 🙏
-`;
-  await safeSend(chatId, msg, { parse_mode: "Markdown" });
-}
-
-/* ================= NOTIF TEKNISI (+ GAMBAR) ================= */
+/* ================= NOTIF TEKNISI ================= */
 async function notifTeknisi(d) {
   const [teknisi] = await db.query(
     "SELECT telegram_chat_id FROM users WHERE role='teknisi' AND telegram_chat_id IS NOT NULL"
   );
-  if (!teknisi.length) return;
+
+  if (!teknisi.length) {
+    console.log("⚠️ Tidak ada teknisi dengan telegram_chat_id");
+    return;
+  }
 
   const caption = `
 🛠️ *Laporan Helpdesk Baru*
@@ -98,11 +88,14 @@ async function notifTeknisi(d) {
   }
 }
 
-/* ================= API TRIGGER DARI WEB ================= */
-/* DIPANGGIL SETELAH WEB INSERT LAPORAN */
+/* ================= API DARI WEB ================= */
 app.post("/notify-teknisi", async (req, res) => {
   try {
-    const { laporan_id } = req.body;
+    console.log("🔥 /notify-teknisi HIT");
+    console.log("BODY:", req.body);
+
+    const laporan_id = req.body?.laporan_id;
+
     if (!laporan_id) {
       return res.status(400).json({ error: "laporan_id wajib" });
     }
@@ -123,9 +116,11 @@ app.post("/notify-teknisi", async (req, res) => {
     }
 
     await notifTeknisi(lap);
+
+    console.log("✅ NOTIF TEKNISI TERKIRIM");
     return res.json({ success: true });
-  } catch (e) {
-    console.error("NOTIFY TEKNISI ERROR:", e);
+  } catch (err) {
+    console.error("NOTIFY TEKNISI ERROR:", err);
     return res.status(500).json({ error: "server error" });
   }
 });
@@ -142,116 +137,10 @@ bot.onText(/\/start/, async (msg) => {
     );
   }
 
-  delete sessions[chatId];
-
   await safeSend(
     chatId,
     `👋 *Helpdesk IT Bot*
-
-Akun Telegram terhubung ✅
-
-Perintah:
-• *daftar*
-• *reset*
-• *testnotif*`,
+Akun Telegram terhubung ✅`,
     { parse_mode: "Markdown" }
   );
-});
-
-/* ================= MESSAGE HANDLER ================= */
-bot.on("message", async (msg) => {
-  const chatId = msg.chat.id;
-  const raw = (msg.text || "").trim();
-  const text = raw.toLowerCase();
-
-  try {
-    /* ===== TEST USER ===== */
-    if (text === "testnotif") {
-      return notifUser(chatId, {
-        judul: "Tes",
-        deskripsi: "Contoh",
-        pic: "Teknisi",
-        estimasi: "10 menit",
-        komentar: "Dicek",
-        status: "Diproses",
-      });
-    }
-
-    /* ===== RESET PASSWORD (TRIGGER DARI WEB) ===== */
-    if (text === "reset") {
-      const [[req]] = await db.query(
-        `
-        SELECT pr.id, u.id AS user_id
-        FROM password_resets pr
-        JOIN users u ON u.telegram_chat_id=?
-        WHERE pr.used=0
-        ORDER BY pr.id DESC
-        LIMIT 1
-        `,
-        [chatId]
-      );
-
-      if (!req) return safeSend(chatId, "❌ Tidak ada permintaan reset.");
-
-      sessions[chatId] = {
-        step: "reset_pass",
-        userId: req.user_id,
-        resetId: req.id,
-      };
-
-      return safeSend(chatId, "🔐 Masukkan password baru:");
-    }
-
-    const s = sessions[chatId];
-    if (!s) return;
-
-    if (s.step === "reset_pass") {
-      if (raw.length < 4) return safeSend(chatId, "❌ Minimal 4 karakter.");
-
-      const hash = await bcrypt.hash(raw, 10);
-      await db.query("UPDATE users SET password=? WHERE id=?", [
-        hash,
-        s.userId,
-      ]);
-      await db.query("UPDATE password_resets SET used=1 WHERE id=?", [
-        s.resetId,
-      ]);
-
-      delete sessions[chatId];
-      return safeSend(chatId, "✅ Password berhasil direset.");
-    }
-
-    /* ===== DAFTAR USER ===== */
-    if (text === "daftar") {
-      sessions[chatId] = { step: "username" };
-      return safeSend(chatId, "Masukkan username:");
-    }
-
-    if (s.step === "username") {
-      const [ex] = await db.query(
-        "SELECT id FROM users WHERE username=?",
-        [raw]
-      );
-      if (ex.length) {
-        delete sessions[chatId];
-        return safeSend(chatId, "❌ Username sudah dipakai.");
-      }
-      sessions[chatId] = { step: "password", username: raw };
-      return safeSend(chatId, "Masukkan password:");
-    }
-
-    if (s.step === "password") {
-      const hash = await bcrypt.hash(raw, 10);
-      await db.query(
-        "INSERT INTO users (username,password,role,telegram_chat_id) VALUES (?,?, 'user',?)",
-        [s.username, hash, chatId]
-      );
-      delete sessions[chatId];
-      return safeSend(chatId, "✅ Akun berhasil dibuat.");
-    }
-  } catch (e) {
-    console.error("BOT ERROR:", e);
-    delete sessions[chatId];
-    safeSend(chatId, "⚠️ Terjadi kesalahan server.");
-  }
 });
