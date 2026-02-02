@@ -1,13 +1,31 @@
 import TelegramBot from "node-telegram-bot-api";
 import mysql from "mysql2/promise";
 import bcrypt from "bcrypt";
+import express from "express";
+
+/* ================= CONFIG ================= */
+const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const WEBHOOK_URL = process.env.WEBHOOK_URL;
+const PORT = process.env.PORT || 3000;
 
 /* ================= BOT ================= */
-const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
-  polling: true,
+const bot = new TelegramBot(TOKEN);
+console.log("🤖 BOT WEBHOOK HIDUP");
+
+/* ================= EXPRESS ================= */
+const app = express();
+app.use(express.json());
+
+bot.setWebHook(`${WEBHOOK_URL}/bot`);
+
+app.post("/bot", (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
 });
 
-console.log("🤖 BOT FINAL HIDUP");
+app.listen(PORT, () => {
+  console.log("🚀 Webhook listening on port", PORT);
+});
 
 /* ================= DATABASE ================= */
 const db = await mysql.createPool({
@@ -18,16 +36,14 @@ const db = await mysql.createPool({
   database: process.env.DB_NAME,
 });
 
-/* ================= SESSION MEMORY ================= */
+/* ================= SESSION ================= */
 const sessions = {};
 
 /* ================= /start ================= */
-/* ❌ TIDAK ADA QUERY DB DI SINI */
+/* ❌ TIDAK SENTUH DATABASE */
 bot.onText(/\/start/, async (msg) => {
-  const chatId = msg.chat.id;
-
   await bot.sendMessage(
-    chatId,
+    msg.chat.id,
     `👋 *Helpdesk IT Bot*
 
 Perintah:
@@ -40,11 +56,11 @@ Perintah:
 /* ================= MESSAGE HANDLER ================= */
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
-  const text = (msg.text || "").trim();
+  const text = (msg.text || "").trim().toLowerCase();
 
   try {
     /* ===== BATAL ===== */
-    if (text.toLowerCase() === "batal") {
+    if (text === "batal") {
       delete sessions[chatId];
       await db.query(
         "UPDATE users SET telegram_step=NULL WHERE telegram_chat_id=?",
@@ -54,14 +70,12 @@ bot.on("message", async (msg) => {
     }
 
     /* ===== DAFTAR ===== */
-    if (text.toLowerCase() === "daftar") {
-      // CEK APAKAH USER SUDAH ADA
+    if (text === "daftar") {
       const [rows] = await db.query(
         "SELECT id FROM users WHERE telegram_chat_id=? LIMIT 1",
         [chatId]
       );
 
-      // JIKA BELUM ADA → INSERT BARU
       if (!rows.length) {
         await db.query(
           "INSERT INTO users (telegram_chat_id, role) VALUES (?, 'user')",
@@ -84,9 +98,9 @@ bot.on("message", async (msg) => {
     const session = sessions[chatId];
     if (!session) return;
 
-    /* ===== STEP USERNAME ===== */
+    /* ===== USERNAME ===== */
     if (session.step === "username") {
-      const username = text.toLowerCase();
+      const username = text;
 
       const [rows] = await db.query(
         "SELECT id FROM users WHERE username=? LIMIT 1",
@@ -94,10 +108,7 @@ bot.on("message", async (msg) => {
       );
 
       if (rows.length) {
-        return bot.sendMessage(
-          chatId,
-          "❌ Username sudah digunakan. Coba yang lain:"
-        );
+        return bot.sendMessage(chatId, "❌ Username sudah dipakai.");
       }
 
       session.username = username;
@@ -115,7 +126,7 @@ bot.on("message", async (msg) => {
       );
     }
 
-    /* ===== STEP PASSWORD ===== */
+    /* ===== PASSWORD ===== */
     if (session.step === "password") {
       if (text.length < 4) {
         return bot.sendMessage(chatId, "❌ Password minimal 4 karakter.");
@@ -134,15 +145,14 @@ bot.on("message", async (msg) => {
 
       return bot.sendMessage(
         chatId,
-        "✅ Akun berhasil dibuat.\nSilakan login di web Helpdesk IT."
+        "✅ Akun berhasil dibuat.\nSilakan login di web."
       );
     }
   } catch (err) {
     console.error("BOT ERROR:", err);
     return bot.sendMessage(
       chatId,
-      "⚠️ Terjadi kesalahan server.\nKetik *daftar* untuk ulangi.",
-      { parse_mode: "Markdown" }
+      "⚠️ Terjadi kesalahan server.\nKetik *daftar* untuk ulangi."
     );
   }
 });
