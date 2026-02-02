@@ -27,16 +27,18 @@ export default function TeknisiPage() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState("harian");
 
+  // ================= TOKEN =================
+  const getToken = () => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem("token");
+  };
+
   // ================= FETCH LAPORAN =================
   const fetchLaporan = async () => {
     try {
       const res = await fetch("/api/teknisi/laporan");
       if (!res.ok) return setLaporan([]);
-
-      const text = await res.text();
-      if (!text) return setLaporan([]);
-
-      const data = JSON.parse(text);
+      const data = await res.json();
       setLaporan(Array.isArray(data) ? data : []);
     } catch {
       setLaporan([]);
@@ -68,19 +70,33 @@ export default function TeknisiPage() {
     fetchChart(mode);
   }, [mode]);
 
-  // ================= UPDATE =================
+  // ================= UPDATE LAPORAN (FIX) =================
   const handleUpdate = async (id, status, pic, estimasi, komentar) => {
     try {
-      const res = await fetch(`/api/laporan/update/${id}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`, // token dari login
-      },
-      body: JSON.stringify({ status, pic, estimasi, komentar }),
-    });
+      const token = getToken();
+      if (!token) {
+        alert("Token tidak ditemukan, silakan login ulang");
+        return;
+      }
 
-      if (!res.ok) throw new Error("Gagal update");
+      const res = await fetch("/api/laporan/update", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          laporan_id: id,
+          status,
+          pic,
+          estimasi,
+          komentar,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Gagal update");
+
       alert("Berhasil update laporan");
       await fetchLaporan();
     } catch (err) {
@@ -139,9 +155,7 @@ export default function TeknisiPage() {
                 key={m}
                 onClick={() => setMode(m)}
                 className={`px-3 py-1 rounded ${
-                  mode === m
-                    ? "bg-green-600 text-white"
-                    : "bg-gray-200"
+                  mode === m ? "bg-green-600 text-white" : "bg-gray-200"
                 }`}
               >
                 {m}
@@ -230,8 +244,8 @@ function LaporanCard({ item, onUpdate }) {
         </p>
 
         <p className="text-sm">
-          <b>Kategori:</b> {item.kategori} |{" "}
-          <b>Prioritas:</b> {item.prioritas}
+          <b>Kategori:</b> {item.kategori} | <b>Prioritas:</b>{" "}
+          {item.prioritas}
         </p>
 
         <p className="text-sm mt-1">{item.deskripsi}</p>
