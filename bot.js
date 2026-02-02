@@ -89,20 +89,19 @@ bot.on("message", async (msg) => {
       return;
     }
     if (text === "updatelaporan") {
-    // CONTOH: ambil 1 laporan terakhir
-    const [[laporan]] = await db.query(`
-      SELECT 
-        l.judul,
-        l.deskripsi,
-        l.status,
-        l.estimasi,
-        l.komentar_teknisi,
-        l.pic,
-        u.telegram_chat_id
-      FROM laporan l
-      JOIN users u ON u.id = l.user_id
-      ORDER BY l.id DESC
-      LIMIT 1
+      const [[laporan]] = await db.query(`
+        SELECT 
+          l.judul,
+          l.deskripsi,
+          l.status,
+          l.estimasi,
+          l.komentar,
+          l.pic,
+          u.telegram_chat_id
+        FROM laporan l
+        JOIN users u ON u.id = l.user_id
+        ORDER BY l.id DESC
+        LIMIT 1
     `);
 
     if (!laporan) {
@@ -112,14 +111,15 @@ bot.on("message", async (msg) => {
     await kirimNotifikasiUser(laporan.telegram_chat_id, {
       judul: laporan.judul,
       deskripsi: laporan.deskripsi,
-      pic: laporan.pic,
-      estimasi: laporan.estimasi,
-      komentar: laporan.komentar_teknisi,
-      status: laporan.status,
+      pic: laporan.pic || "-",
+      estimasi: laporan.estimasi || "-",
+      komentar: laporan.komentar || "-",
+      status: laporan.status || "Pending",
     });
 
     return bot.sendMessage(chatId, "✅ Notifikasi laporan terkirim ke user.");
   }
+
 
 
     /* ===== BATAL ===== */
