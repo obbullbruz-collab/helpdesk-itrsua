@@ -1,32 +1,30 @@
 import { db } from "@/lib/db";
+import jwt from "jsonwebtoken";
 
 export async function POST(req) {
   try {
-    const {
-      laporan_id,
-      status,
-      pic,
-      estimasi,
-      komentar,
-    } = await req.json();
-
-    if (!laporan_id || !status) {
-      return Response.json(
-        { message: "Data tidak lengkap" },
-        { status: 400 }
-      );
+    const auth = req.headers.get("authorization");
+    if (!auth) {
+      return Response.json({ message: "Unauthorized" }, { status: 401 });
     }
 
+    const token = auth.replace("Bearer ", "");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (decoded.role !== "teknisi") {
+      return Response.json({ message: "Forbidden" }, { status: 403 });
+    }
+
+    const { laporan_id, status, pic, estimasi, komentar } = await req.json();
+
     await db.query(
-      `
-      UPDATE laporan
-      SET status=?, pic=?, estimasi=?, komentar=?
-      WHERE id=?
-      `,
+      `UPDATE laporan
+       SET status=?, pic=?, estimasi=?, komentar=?
+       WHERE id=?`,
       [status, pic, estimasi, komentar, laporan_id]
     );
 
-    // trigger bot → notif user
+    // 🔔 NOTIF USER
     await fetch(`${process.env.BOT_BASE_URL}/notify-user`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -34,11 +32,8 @@ export async function POST(req) {
     });
 
     return Response.json({ success: true });
-  } catch (err) {
-    console.error("UPDATE LAPORAN ERROR:", err);
-    return Response.json(
-      { message: "Server error" },
-      { status: 500 }
-    );
+  } catch (e) {
+    console.error(e);
+    return Response.json({ message: "Server error" }, { status: 500 });
   }
 }

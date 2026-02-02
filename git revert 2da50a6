@@ -1,0 +1,50 @@
+[33m2da50a6[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m remove laporan api (temporary for demo)
+[33m6ef3d46[m akhirrrr
+[33m004885f[m akhirrr
+[33m1f02510[m finallyy
+[33m391615b[m finall
+[33m0b0e0d2[m bot finall
+[33m9d1f5b8[m updatenotif
+[33mfb34439[m update laporan
+[33m1ac39e7[m auto notifikasi
+[33ma289f63[m template user
+[33m5cd7245[m bot finall bangrdd bismillah
+[33mabbfd52[m finalll fixxx
+[33m01eee6f[m fix: prevent duplicate username on register
+[33m9d1e23f[m fix use databse
+[33m30ef404[m enable telegram webhook
+[33mc883c7f[m final stable telegram bot register
+[33mc10baae[m bot 2 bismillah
+[33mbebc69f[m step2: telegram register ulang
+[33m04a5607[m bot1
+[33m3af9ed6[m feat: stable telegram register full
+[33m247779d[m bot okry
+[33m838c144[m feat: telegram register flow stable
+[33mdd8de20[m fix: isolate telegram bot worker
+[33m98b266b[m bot 2
+[33m5a8efb6[m bot stabil
+[33m6f8bbe4[m update bot
+[33m5506ba2[m fix: full statistik harian mingguan bulanan
+[33m80af4e6[m grafik teknisi
+[33md995815[m chore: disable sendToUser import to fix build
+[33m87b2497[m fix: teknisi dashboard image render without changing logic
+[33mc654d80[m refactor: restore simple teknisi dashboard with manual update
+[33mb851410[m fix: add sendToUser export to telegram helper
+[33m9a660fd[m feat: teknisi manual update + estimasi + telegram user notify
+[33m0332dad[m fix: finalize dashboard teknisi (grouping, priority, update, grafik)
+[33m6b774d8[m fix: teknisi page
+[33mb795ba6[m feat: finalize dashboard teknisi (sorting, cloudinary, grafik)
+[33m49b0004[m fix: render cloudinary image urls correctly in dashboard
+[33m698eae9[m feat: upload laporan images to cloudinary
+[33m3954092[m fix: load laporan images via api uploads
+[33mc203fc8[m fix: render dashboard images via api uploads
+[33meb0c131[m fix: force render dashboard user laporan
+[33mec064b0[m fix: dashboard user no-store cache
+[33mfe4560e[m fix: auth cookie path for all api routes
+[33m70f6a84[m fix: upload laporan image to public uploads
+[33m609f0f8[m fix: stable get user laporan using cookie header
+[33mc2a74ba[m fix: dashboard user fetch laporan by logged-in user
+[33mfefee6a[m fix: mysql db connection and stabilize login api
+[33m64c94c7[m test: log DATABASE_URL
+[33m1d4df2d[m fix: force dynamic rendering for API routes using database
+[33m389b946[m Initial commit

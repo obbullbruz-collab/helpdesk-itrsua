@@ -71,11 +71,14 @@ export default function TeknisiPage() {
   // ================= UPDATE =================
   const handleUpdate = async (id, status, pic, estimasi, komentar) => {
     try {
-      const res = await fetch(`/api/laporan/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, pic, estimasi, komentar }),
-      });
+      const res = await fetch(`/api/laporan/update/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`, // token dari login
+      },
+      body: JSON.stringify({ status, pic, estimasi, komentar }),
+    });
 
       if (!res.ok) throw new Error("Gagal update");
       alert("Berhasil update laporan");
