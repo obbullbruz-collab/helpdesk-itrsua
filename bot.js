@@ -32,6 +32,26 @@ const db = await mysql.createPool(process.env.DATABASE_URL);
 /* ================= SESSION (MEMORY) ================= */
 const sessions = {};
 
+/* ================= NOTIFIKASI USER ================= */
+async function kirimNotifikasiUser(chatId, data) {
+  const pesan = `
+📢 *Update Laporan Helpdesk*
+
+📝 *Judul:* ${data.judul}
+📄 *Deskripsi:* ${data.deskripsi}
+👤 *PIC:* ${data.pic}
+⏱️ *Estimasi Penyelesaian:* ${data.estimasi}
+💬 *Komentar Teknisi:* ${data.komentar}
+📌 *Status:* *${data.status}*
+
+Terima kasih telah menunggu 🙏
+  `;
+
+  await bot.sendMessage(chatId, pesan, {
+    parse_mode: "Markdown",
+  });
+}
+
 /* ================= /start ================= */
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
@@ -43,7 +63,8 @@ bot.onText(/\/start/, async (msg) => {
 
 Perintah:
 • *daftar* → buat akun
-• *batal* → batalkan proses`,
+• *batal* → batalkan proses
+• *testnotif* → tes notifikasi`,
     { parse_mode: "Markdown" }
   );
 });
@@ -55,6 +76,19 @@ bot.on("message", async (msg) => {
   const text = rawText.toLowerCase();
 
   try {
+    /* ===== TEST NOTIFIKASI ===== */
+    if (text === "testnotif") {
+      await kirimNotifikasiUser(chatId, {
+        judul: "Gazzz",
+        deskripsi: "Oemhjiii",
+        pic: "Oci",
+        estimasi: "10 menit",
+        komentar: "Gsgwhw",
+        status: "Diproses",
+      });
+      return;
+    }
+
     /* ===== BATAL ===== */
     if (text === "batal") {
       delete sessions[chatId];
@@ -132,4 +166,5 @@ bot.on("message", async (msg) => {
     );
   }
 });
+
 /* ================= END OF FILE ================= */
