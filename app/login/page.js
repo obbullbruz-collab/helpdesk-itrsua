@@ -31,7 +31,10 @@ export default function LoginPage() {
 
       // role ada di dalam data.user.role
       const role = data.user?.role;
-
+      
+      if (data.token) {
+        localStorage.setItem("token", data.token);
+      } 
       if (role === "teknisi") {
         router.push("/teknisi");
       } else {
