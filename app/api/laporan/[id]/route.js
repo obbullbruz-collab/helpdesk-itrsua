@@ -1,91 +1,88 @@
 import { db } from "@/lib/db";
 
-export async function PUT(request, { params }) {
+export async function POST(req) {
   try {
-    const { id } = params;
-    const { status, pic, estimasi, komentar } = await request.json();
+    const {
+      laporan_id,
+      status,
+      pic,
+      estimasi,
+      komentar,
+    } = await req.json();
 
-    // ================== UPDATE LAPORAN ==================
-    await db.query(
-      `
-      UPDATE laporan
-      SET status = ?, pic = ?, komentar = ?, estimasi = ?
-      WHERE id = ?
-      `,
-      [status, pic, komentar, estimasi, id]
-    );
-
-    // ================== AMBIL DATA UNTUK TELEGRAM ==================
-    const [rows] = await db.query(
-      `
-      SELECT 
-        l.judul,
-        l.deskripsi,
-        l.status,
-        l.pic,
-        l.estimasi,
-        l.komentar,
-        u.telegram_chat_id
-      FROM laporan l
-      JOIN users u ON l.user_id = u.id
-      WHERE l.id = ?
-      LIMIT 1
-      `,
-      [id]
-    );
-
-    // ================== KIRIM TELEGRAM ==================
-    if (rows.length && rows[0].telegram_chat_id) {
-      const l = rows[0];
-
-      const message = `
-📢 *Update Laporan Helpdesk*
-
-📝 Judul: ${l.judul}
-📄 Deskripsi: ${l.deskripsi}
-👨🏻‍💻 PIC: ${l.pic || "-"}
-🕛 Estimasi Penyelesaian: ${l.estimasi || "-"}
-💬 Komentar Teknisi: ${l.komentar || "-"}
-📌 Status: *${l.status}*
-
-Terima kasih telah menunggu 🙏
-      `;
-
-      await fetch(
-        `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: l.telegram_chat_id,
-            text: message,
-            parse_mode: "Markdown",
-          }),
-        }
+    if (!laporan_id || !status) {
+      return Response.json(
+        { message: "Data tidak lengkap" },
+        { status: 400 }
       );
     }
 
-    // ================== RESPONSE ==================
-    return new Response(
-      JSON.stringify({ success: true }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }
+    await db.query(
+      `
+      UPDATE laporan
+      SET status=?, pic=?, komentar=?, estimasi=?
+      WHERE id=?
+      `,
+      [status, pic, komentar, estimasi, laporan_id]
     );
 
+    // 🔥 TRIGGER BOT → NOTIF USER
+    await fetch(`${process.env.BOT_BASE_URL}/notify-user`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ laporan_id }),
+    });
+
+    return Response.json({ success: true });
   } catch (err) {
     console.error("UPDATE LAPORAN ERROR:", err);
+    return Response.json(
+      { message: "Server error" },
+      { status: 500 }
+    );
+  }
+}
+import { db } from "@/lib/db";
 
-    return new Response(
-      JSON.stringify({
-        success: false,
-        message: "Server error",
-      }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      }
+export async function POST(req) {
+  try {
+    const {
+      laporan_id,
+      status,
+      pic,
+      estimasi,
+      komentar,
+    } = await req.json();
+
+    if (!laporan_id || !status) {
+      return Response.json(
+        { message: "Data tidak lengkap" },
+        { status: 400 }
+      );
+    }
+
+    await db.query(
+      `
+      UPDATE laporan
+      SET status=?, pic=?, komentar=?, estimasi=?
+      WHERE id=?
+      `,
+      [status, pic, komentar, estimasi, laporan_id]
+    );
+
+    // 🔥 TRIGGER BOT → NOTIF USER
+    await fetch(`${process.env.BOT_BASE_URL}/notify-user`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ laporan_id }),
+    });
+
+    return Response.json({ success: true });
+  } catch (err) {
+    console.error("UPDATE LAPORAN ERROR:", err);
+    return Response.json(
+      { message: "Server error" },
+      { status: 500 }
     );
   }
 }
