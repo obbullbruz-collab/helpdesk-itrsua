@@ -1,154 +1,146 @@
 import TelegramBot from "node-telegram-bot-api";
 import mysql from "mysql2/promise";
 import bcrypt from "bcrypt";
-import express from "express";
 
-// ================= CONFIG =================
-const TOKEN = "8526115117:AAHrFzBCQ6cAg_McFe6l5LiBn_iD_a0whjw";
-const bot = new TelegramBot(TOKEN, { polling: true });
+/* ================= BOT ================= */
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
+  polling: true,
+});
 
-// ================= DATABASE =================
+console.log("🤖 BOT DAFTAR HIDUP");
+
+/* ================= DATABASE ================= */
 const db = await mysql.createPool({
-  host: "localhost",
-  user: "root",
-  password: "",
-  database: "helpdesk_it",
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
 });
 
-// ================= EXPRESS =================
-const app = express();
-app.use(express.json());
-
-app.listen(4000, () => {
-  console.log("📡 Bot API jalan di http://localhost:4000");
-});
-
-// ================= /start =================
-bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(
-    msg.chat.id,
-    `👋 *Helpdesk IT UNAND Bot*
-
-Perintah:
-👉 *daftar* — membuat akun
-👉 *batal* — membatalkan proses
-👉 */reset KODE PASSWORD* — reset password
-
-Contoh:
-/reset 123456 passwordbaru`,
-    { parse_mode: "Markdown" }
-  );
-});
-
-// ================= SESSION DAFTAR =================
+/* ================= SESSION MEMORY ================= */
 const sessions = {};
 
-// ================= RESET PASSWORD (PAKAI TOKEN) =================
-bot.onText(/\/reset (\d{6}) (.+)/, async (msg, match) => {
+/* ================= /start ================= */
+bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
-  const token = match[1];
-  const newPassword = match[2];
-
-  if (newPassword.length < 4) {
-    return bot.sendMessage(chatId, "Password minimal 4 karakter.");
-  }
 
   try {
-    const [rows] = await db.query(
-      `SELECT id FROM users
-       WHERE reset_token = ?
-       AND telegram_chat_id = ?
-       AND reset_expired > NOW()
-       LIMIT 1`,
-      [token, chatId]
+    await db.query(
+      `INSERT INTO users (telegram_chat_id, role)
+       VALUES (?, 'user')
+       ON DUPLICATE KEY UPDATE telegram_chat_id=telegram_chat_id`,
+      [chatId]
     );
 
-    if (!rows.length) {
+    await bot.sendMessage(
+      chatId,
+      `👋 *Helpdesk IT Bot*
+
+Perintah:
+• ketik *daftar* → buat akun
+• ketik *batal* → batalkan proses`,
+      { parse_mode: "Markdown" }
+    );
+  } catch (err) {
+    console.error("START ERROR:", err);
+    bot.sendMessage(chatId, "⚠️ Server error, coba lagi.");
+  }
+});
+
+/* ================= MESSAGE HANDLER ================= */
+bot.on("message", async (msg) => {
+  const chatId = msg.chat.id;
+  const text = (msg.text || "").trim();
+
+  try {
+    console.log("MSG:", chatId, text);
+
+    /* ===== BATAL ===== */
+    if (text.toLowerCase() === "batal") {
+      delete sessions[chatId];
+      await db.query(
+        "UPDATE users SET telegram_step=NULL WHERE telegram_chat_id=?",
+        [chatId]
+      );
+      return bot.sendMessage(chatId, "❌ Proses dibatalkan.");
+    }
+
+    /* ===== DAFTAR ===== */
+    if (text.toLowerCase() === "daftar") {
+      sessions[chatId] = { step: "username" };
+
+      await db.query(
+        "UPDATE users SET telegram_step='daftar_username' WHERE telegram_chat_id=?",
+        [chatId]
+      );
+
+      return bot.sendMessage(chatId, "Masukkan *username*:", {
+        parse_mode: "Markdown",
+      });
+    }
+
+    const session = sessions[chatId];
+    if (!session) return;
+
+    /* ===== STEP USERNAME ===== */
+    if (session.step === "username") {
+      const username = text.toLowerCase();
+
+      const [rows] = await db.query(
+        "SELECT id FROM users WHERE username=? LIMIT 1",
+        [username]
+      );
+
+      if (rows.length) {
+        return bot.sendMessage(
+          chatId,
+          "❌ Username sudah dipakai, coba lagi:"
+        );
+      }
+
+      session.username = username;
+      session.step = "password";
+
+      await db.query(
+        "UPDATE users SET telegram_step='daftar_password' WHERE telegram_chat_id=?",
+        [chatId]
+      );
+
       return bot.sendMessage(
         chatId,
-        "❌ Token tidak valid atau sudah kadaluarsa."
+        "Masukkan *password* (min 4 karakter):",
+        { parse_mode: "Markdown" }
       );
     }
 
-    const hash = await bcrypt.hash(newPassword, 10);
+    /* ===== STEP PASSWORD ===== */
+    if (session.step === "password") {
+      if (text.length < 4) {
+        return bot.sendMessage(chatId, "❌ Password minimal 4 karakter.");
+      }
 
-    await db.query(
-      `UPDATE users
-       SET password=?, reset_token=NULL, reset_expired=NULL
-       WHERE id=?`,
-      [hash, rows[0].id]
-    );
+      const hash = await bcrypt.hash(text, 10);
 
+      await db.query(
+        `UPDATE users
+         SET username=?, password=?, telegram_step=NULL
+         WHERE telegram_chat_id=?`,
+        [session.username, hash, chatId]
+      );
+
+      delete sessions[chatId];
+
+      return bot.sendMessage(
+        chatId,
+        "✅ Akun berhasil dibuat.\nSilakan login di web Helpdesk IT."
+      );
+    }
+  } catch (err) {
+    console.error("BOT ERROR:", err);
     return bot.sendMessage(
       chatId,
-      "✅ Password berhasil direset.\nSilakan login dengan password baru."
-    );
-  } catch (e) {
-    console.error(e);
-    return bot.sendMessage(chatId, "❌ Server error.");
-  }
-});
-
-// ================= DAFTAR VIA TELEGRAM =================
-bot.on("message", async (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  const text = (msg.text || "").trim().toLowerCase();
-
-  if (text === "batal") {
-    delete sessions[chatId];
-    return bot.sendMessage(chatId, "❌ Proses dibatalkan.");
-  }
-
-  if (text === "daftar") {
-    sessions[chatId] = { step: "username" };
-    return bot.sendMessage(chatId, "Masukkan *username*:", {
-      parse_mode: "Markdown",
-    });
-  }
-
-  const session = sessions[chatId];
-  if (!session) return;
-
-  // STEP USERNAME
-  if (session.step === "username") {
-    const [rows] = await db.query(
-      "SELECT id FROM users WHERE username=? LIMIT 1",
-      [text]
-    );
-
-    if (rows.length) {
-      return bot.sendMessage(chatId, "❌ Username sudah digunakan.");
-    }
-
-    session.username = text;
-    session.step = "password";
-    return bot.sendMessage(chatId, "Masukkan *password*:", {
-      parse_mode: "Markdown",
-    });
-  }
-
-  // STEP PASSWORD
-  if (session.step === "password") {
-    if (text.length < 4) {
-      return bot.sendMessage(chatId, "Password minimal 4 karakter.");
-    }
-
-    const hash = await bcrypt.hash(text, 10);
-
-    await db.query(
-      `INSERT INTO users
-       (username, password, role, telegram_id, telegram_chat_id)
-       VALUES (?, ?, 'user', ?, ?)`,
-      [session.username, hash, userId, chatId]
-    );
-
-    delete sessions[chatId];
-    return bot.sendMessage(
-      chatId,
-      "✅ Akun berhasil dibuat.\nSilakan login di web Helpdesk IT."
+      "⚠️ Terjadi kesalahan server.\nKetik *daftar* untuk ulangi.",
+      { parse_mode: "Markdown" }
     );
   }
 });
-
-console.log("🤖 Bot Telegram berjalan...");
