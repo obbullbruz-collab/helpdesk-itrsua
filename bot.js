@@ -24,7 +24,7 @@ if (!process.env.DATABASE_URL) {
 }
 
 /* ================= BOT ================= */
-// ⚠️ JANGAN pakai webHook:{port} di Railway
+// ⚠️ Railway: JANGAN pakai webHook:{port}
 const bot = new TelegramBot(TOKEN);
 
 /* ================= SERVER ================= */
@@ -38,7 +38,7 @@ const db = await mysql.createPool(process.env.DATABASE_URL);
 /* ================= SESSION ================= */
 const sessions = {};
 
-/* ================= TELEGRAM WEBHOOK ENDPOINT ================= */
+/* ================= TELEGRAM WEBHOOK ================= */
 app.post("/bot", (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
@@ -52,6 +52,36 @@ async function safeSend(chatId, text, opt = {}) {
     console.error("SEND ERROR:", e.message);
   }
 }
+
+/* ================= NOTIF RESET PASSWORD (🔥 FIX UTAMA) ================= */
+app.post("/notify-reset", async (req, res) => {
+  const { telegram_chat_id, token } = req.body;
+
+  if (!telegram_chat_id || !token) {
+    return res.status(400).json({ error: "payload invalid" });
+  }
+
+  const msg = `
+🔐 *Reset Password Helpdesk IT*
+
+Kode reset kamu:
+*${token}*
+
+Ketik:
+reset
+di chat ini untuk lanjut.
+`;
+
+  try {
+    await bot.sendMessage(telegram_chat_id, msg, {
+      parse_mode: "Markdown",
+    });
+    res.json({ success: true });
+  } catch (e) {
+    console.error("RESET SEND ERROR:", e.message);
+    res.status(500).json({ error: "send failed" });
+  }
+});
 
 /* ================= NOTIF TEKNISI ================= */
 async function notifTeknisi(lap) {
@@ -170,6 +200,7 @@ bot.on("message", async (msg) => {
   const text = (msg.text || "").trim();
 
   try {
+    /* ===== DAFTAR ===== */
     if (text.toLowerCase() === "daftar") {
       sessions[chatId] = { step: "username" };
       return safeSend(chatId, "Masukkan *username baru*:", {
@@ -177,25 +208,28 @@ bot.on("message", async (msg) => {
       });
     }
 
+    /* ===== RESET (🔥 FIXED) ===== */
     if (text.toLowerCase() === "reset") {
-      const [[req]] = await db.query(
+      const [[user]] = await db.query(
         `
-        SELECT pr.id, pr.user_id
-        FROM password_resets pr
-        JOIN users u ON u.id = pr.user_id
-        WHERE u.telegram_chat_id=? AND pr.used=0
-        ORDER BY pr.id DESC
-        LIMIT 1
+        SELECT id, reset_token, reset_expired
+        FROM users
+        WHERE telegram_chat_id=?
         `,
         [chatId]
       );
 
-      if (!req) return safeSend(chatId, "❌ Tidak ada permintaan reset.");
+      if (!user || !user.reset_token) {
+        return safeSend(chatId, "❌ Tidak ada permintaan reset.");
+      }
+
+      if (new Date(user.reset_expired) < new Date()) {
+        return safeSend(chatId, "❌ Token reset sudah kadaluarsa.");
+      }
 
       sessions[chatId] = {
         step: "reset_pass",
-        userId: req.user_id,
-        resetId: req.id,
+        userId: user.id,
       };
 
       return safeSend(chatId, "🔐 Masukkan password baru:");
@@ -204,6 +238,7 @@ bot.on("message", async (msg) => {
     const s = sessions[chatId];
     if (!s) return;
 
+    /* ===== PROSES DAFTAR ===== */
     if (s.step === "username") {
       const [cek] = await db.query(
         "SELECT id FROM users WHERE username=?",
@@ -239,6 +274,7 @@ bot.on("message", async (msg) => {
       return safeSend(chatId, "✅ Akun berhasil dibuat.\nSilakan login di web.");
     }
 
+    /* ===== PROSES RESET PASSWORD (🔥 FIXED) ===== */
     if (s.step === "reset_pass") {
       if (text.length < 4)
         return safeSend(chatId, "❌ Minimal 4 karakter.");
@@ -246,12 +282,12 @@ bot.on("message", async (msg) => {
       const hash = await bcrypt.hash(text, 10);
 
       await db.query(
-        "UPDATE users SET password=? WHERE id=?",
+        `
+        UPDATE users
+        SET password=?, reset_token=NULL, reset_expired=NULL
+        WHERE id=?
+        `,
         [hash, s.userId]
-      );
-      await db.query(
-        "UPDATE password_resets SET used=1 WHERE id=?",
-        [s.resetId]
       );
 
       delete sessions[chatId];
@@ -267,7 +303,6 @@ bot.on("message", async (msg) => {
 /* ================= START ================= */
 app.listen(PORT, async () => {
   console.log("🤖 Bot running on port", PORT);
-
   await bot.setWebHook(`${WEBHOOK_URL}/bot`);
   console.log("✅ Webhook set:", `${WEBHOOK_URL}/bot`);
 });
