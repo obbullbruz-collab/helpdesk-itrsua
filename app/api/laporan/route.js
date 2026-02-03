@@ -85,23 +85,37 @@ export async function POST(request) {
 
     const laporanId = result.insertId;
 
-    /* ========== NOTIF TEKNISI (🔥 FIX) ========== */
-    try {
-      await fetch(`${process.env.BOT_BASE_URL}/notify-teknisi`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ laporan_id: laporanId }),
-      });
-    } catch (e) {
-      console.error("NOTIF TEKNISI ERROR:", e.message);
-    }
+  /* ========== NOTIF TEKNISI ========== */
+  try {
+    const r1 = await fetch(`${process.env.BOT_BASE_URL}/notify-teknisi`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ laporan_id: laporanId }),
+    });
 
-    return Response.json({ success: true });
+    console.log("NOTIF TEKNISI STATUS:", r1.status);
+  } catch (e) {
+    console.error("NOTIF TEKNISI ERROR:", e);
+  }
+
+  /* ========== NOTIF USER ========== */
+  try {
+    const r2 = await fetch(`${process.env.BOT_BASE_URL}/notify-user`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ laporan_id: laporanId }),
+    });
+
+    console.log("NOTIF USER STATUS:", r2.status);
+    } catch (e) {
+    console.error("NOTIF USER ERROR:", e);
+  }
   } catch (err) {
     console.error("CREATE LAPORAN ERROR:", err);
     return Response.json(
       { message: "Server error", error: String(err) },
       { status: 500 }
     );
-  }
-}
+  
+  
+}}

@@ -10,22 +10,14 @@ const WEB_BASE_URL = process.env.WEB_BASE_URL;
 const PORT = process.env.PORT || 8080;
 
 /* ================= BOT & SERVER ================= */
-const bot = new TelegramBot(TOKEN);
-const app = express();
+// 🔥 FIX 1: aktifkan mode webhook dengan benar
+const bot = new TelegramBot(TOKEN, {
+  webHook: { port: PORT },
+});
 
+const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-bot.setWebHook(`${WEBHOOK_URL}/bot`);
-
-app.post("/bot", (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
-
-app.listen(PORT, () => {
-  console.log("🤖 Bot running on port", PORT);
-});
 
 /* ================= DATABASE ================= */
 const db = await mysql.createPool(process.env.DATABASE_URL);
@@ -37,8 +29,9 @@ const sessions = {};
 async function safeSend(chatId, text, opt = {}) {
   try {
     await bot.sendMessage(chatId, text, opt);
+    console.log("✅ SEND TO:", chatId);
   } catch (e) {
-    console.error("SEND ERROR:", e.message);
+    console.error("❌ SEND ERROR:", e.message);
   }
 }
 
@@ -51,6 +44,8 @@ async function notifTeknisi(lap) {
     WHERE role='teknisi' AND telegram_chat_id IS NOT NULL
     `
   );
+
+  console.log("👷 Teknisi ditemukan:", rows.length);
 
   if (!rows.length) return;
 
@@ -103,6 +98,8 @@ async function notifUser(lap) {
 
 /* ================= API DARI WEB ================= */
 app.post("/notify-teknisi", async (req, res) => {
+  console.log("🔥 HIT /notify-teknisi", req.body);
+
   const { laporan_id } = req.body;
   if (!laporan_id) return res.status(400).json({ error: "laporan_id wajib" });
 
@@ -123,6 +120,8 @@ app.post("/notify-teknisi", async (req, res) => {
 });
 
 app.post("/notify-user", async (req, res) => {
+  console.log("🔥 HIT /notify-user", req.body);
+
   const { laporan_id } = req.body;
   if (!laporan_id) return res.status(400).json({ error: "laporan_id wajib" });
 
@@ -161,7 +160,6 @@ bot.on("message", async (msg) => {
   const text = (msg.text || "").trim();
 
   try {
-    /* ===== DAFTAR ===== */
     if (text.toLowerCase() === "daftar") {
       sessions[chatId] = { step: "username" };
       return safeSend(chatId, "Masukkan *username baru*:", {
@@ -169,7 +167,6 @@ bot.on("message", async (msg) => {
       });
     }
 
-    /* ===== RESET ===== */
     if (text.toLowerCase() === "reset") {
       const [[req]] = await db.query(
         `
@@ -183,9 +180,7 @@ bot.on("message", async (msg) => {
         [chatId]
       );
 
-      if (!req) {
-        return safeSend(chatId, "❌ Tidak ada permintaan reset.");
-      }
+      if (!req) return safeSend(chatId, "❌ Tidak ada permintaan reset.");
 
       sessions[chatId] = {
         step: "reset_pass",
@@ -199,7 +194,6 @@ bot.on("message", async (msg) => {
     const s = sessions[chatId];
     if (!s) return;
 
-    /* ===== PROSES DAFTAR ===== */
     if (s.step === "username") {
       const username = text;
 
@@ -220,9 +214,8 @@ bot.on("message", async (msg) => {
     }
 
     if (s.step === "password") {
-      if (text.length < 4) {
+      if (text.length < 4)
         return safeSend(chatId, "❌ Password minimal 4 karakter.");
-      }
 
       const hash = await bcrypt.hash(text, 10);
 
@@ -235,14 +228,9 @@ bot.on("message", async (msg) => {
       );
 
       delete sessions[chatId];
-
-      return safeSend(
-        chatId,
-        "✅ Akun berhasil dibuat.\nSilakan login di web."
-      );
+      return safeSend(chatId, "✅ Akun berhasil dibuat.\nSilakan login di web.");
     }
 
-    /* ===== PROSES RESET ===== */
     if (s.step === "reset_pass") {
       if (text.length < 4)
         return safeSend(chatId, "❌ Minimal 4 karakter.");
@@ -266,4 +254,13 @@ bot.on("message", async (msg) => {
     delete sessions[chatId];
     safeSend(chatId, "⚠️ Terjadi kesalahan server.");
   }
+});
+
+/* ================= START SERVER ================= */
+// 🔥 FIX 2: listen dulu, BARU setWebhook
+app.listen(PORT, async () => {
+  console.log("🤖 Bot running on port", PORT);
+
+  await bot.setWebHook(`${WEBHOOK_URL}/bot`);
+  console.log("✅ Webhook set to:", `${WEBHOOK_URL}/bot`);
 });

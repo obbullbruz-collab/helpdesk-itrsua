@@ -25,8 +25,13 @@ export default function LaporanPage() {
       formData.append("kategori", category);
       formData.append("lokasi", lokasi);
       formData.append("prioritas", priority);
-      if (image) formData.append("image", image);
-
+      formData.append("gambar", file);
+      
+      await fetch("/api/laporan", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
       const res = await fetch("/api/laporan", {
         method: "POST",
         body: formData,
