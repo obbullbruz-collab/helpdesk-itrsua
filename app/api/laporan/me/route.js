@@ -1,14 +1,11 @@
-export const runtime = "nodejs";
-
-import { db } from "@/lib/db";
 import jwt from "jsonwebtoken";
-import { cookies } from "next/headers";
+import { db } from "@/lib/db";
 
-export async function GET() {
-  const token = cookies().get("token")?.value;
+export default async function handler(req, res) {
+  const token = req.cookies?.token;
 
   if (!token) {
-    return Response.json({ user: null }, { status: 401 });
+    return res.status(401).json({ user: null });
   }
 
   try {
@@ -19,8 +16,8 @@ export async function GET() {
       [decoded.id]
     );
 
-    return Response.json({ user });
+    return res.json({ user });
   } catch {
-    return Response.json({ user: null }, { status: 401 });
+    return res.status(401).json({ user: null });
   }
 }
