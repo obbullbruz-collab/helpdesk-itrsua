@@ -1,7 +1,9 @@
+export const runtime = "nodejs";
+
 import { db } from "@/lib/db";
 
 function generateToken() {
-  return Math.floor(100000 + Math.random() * 900000).toString(); // 6 digit
+  return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 export async function POST(req) {
@@ -12,67 +14,46 @@ export async function POST(req) {
       return Response.json({ success: false, message: "Username wajib diisi" });
     }
 
-    const [rows] = await db.query(
-      "SELECT id, telegram_chat_id FROM users WHERE username = ? LIMIT 1",
+    const [[user]] = await db.query(
+      "SELECT id, telegram_chat_id FROM users WHERE username=? LIMIT 1",
       [username]
     );
 
-    if (rows.length === 0) {
+    if (!user) {
       return Response.json({ success: false, message: "Username tidak ditemukan" });
     }
-
-    const user = rows[0];
 
     if (!user.telegram_chat_id) {
       return Response.json({
         success: false,
-        message: "Akun belum terhubung dengan Telegram",
+        message: "Akun belum terhubung ke Telegram",
       });
     }
 
     const token = generateToken();
-    const expired = new Date(Date.now() + 10 * 60 * 1000); // 10 menit
+    const expired = new Date(Date.now() + 10 * 60 * 1000);
 
     await db.query(
-      "UPDATE users SET reset_token = ?, reset_expired = ? WHERE id = ?",
+      "UPDATE users SET reset_token=?, reset_expired=? WHERE id=?",
       [token, expired, user.id]
     );
 
-    const text = `🔐 *Reset Password Helpdesk IT*
-
-Kode reset kamu:
-*${token}*
-
-Balas dengan format:
-\`/reset KODE PASSWORD_BARU\`
-
-Contoh:
-\`/reset ${token} 123456\`
-
-⏳ Berlaku 10 menit`;
-
-    await fetch(
-      `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: user.telegram_chat_id,
-          text,
-          parse_mode: "Markdown",
-        }),
-      }
-    );
+    // 🔥 KIRIM KE BOT (BUKAN KE TELEGRAM LANGSUNG)
+    await fetch(`${process.env.BOT_BASE_URL}/notify-reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        telegram_chat_id: user.telegram_chat_id,
+        token,
+      }),
+    });
 
     return Response.json({
       success: true,
       message: "Kode reset dikirim ke Telegram",
     });
   } catch (err) {
-    console.error(err);
-    return Response.json({
-      success: false,
-      message: "Server error",
-    });
+    console.error("LUPA PASSWORD ERROR:", err);
+    return Response.json({ success: false, message: "Server error" });
   }
 }

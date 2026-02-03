@@ -5,32 +5,22 @@ import express from "express";
 
 /* ================= ENV ================= */
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const WEBHOOK_URL = process.env.WEBHOOK_URL; // https://xxxx.up.railway.app
+const WEBHOOK_URL = process.env.WEBHOOK_URL;
 const WEB_BASE_URL = process.env.WEB_BASE_URL;
 const PORT = process.env.PORT || 8080;
 
 /* ================= VALIDASI ENV ================= */
-if (!TOKEN) {
-  console.error("❌ TELEGRAM_BOT_TOKEN belum diset");
-  process.exit(1);
-}
-if (!WEBHOOK_URL) {
-  console.error("❌ WEBHOOK_URL belum diset");
-  process.exit(1);
-}
-if (!process.env.DATABASE_URL) {
-  console.error("❌ DATABASE_URL belum diset");
+if (!TOKEN || !WEBHOOK_URL || !process.env.DATABASE_URL) {
+  console.error("❌ ENV belum lengkap");
   process.exit(1);
 }
 
 /* ================= BOT ================= */
-// ⚠️ JANGAN pakai webHook:{port} di Railway
 const bot = new TelegramBot(TOKEN);
 
 /* ================= SERVER ================= */
 const app = express();
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 /* ================= DATABASE ================= */
 const db = await mysql.createPool(process.env.DATABASE_URL);
@@ -38,7 +28,7 @@ const db = await mysql.createPool(process.env.DATABASE_URL);
 /* ================= SESSION ================= */
 const sessions = {};
 
-/* ================= TELEGRAM WEBHOOK ENDPOINT ================= */
+/* ================= TELEGRAM WEBHOOK ================= */
 app.post("/bot", (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
@@ -53,28 +43,53 @@ async function safeSend(chatId, text, opt = {}) {
   }
 }
 
-/* ================= NOTIF TEKNISI ================= */
-async function notifTeknisi(lap) {
+/* =================================================
+   🔔 NOTIF DARI WEB
+================================================= */
+
+/* === NOTIF RESET PASSWORD (🔥 INI YANG PENTING) === */
+app.post("/notify-reset", async (req, res) => {
+  const { telegram_chat_id } = req.body;
+  if (!telegram_chat_id) return res.sendStatus(400);
+
+  await safeSend(
+    telegram_chat_id,
+    `🔐 *Reset Password*
+
+Ketik *reset* untuk melanjutkan.`,
+    { parse_mode: "Markdown" }
+  );
+
+  res.json({ success: true });
+});
+
+/* === NOTIF TEKNISI === */
+app.post("/notify-teknisi", async (req, res) => {
+  const { laporan_id } = req.body;
+  if (!laporan_id) return res.sendStatus(400);
+
+  const [[lap]] = await db.query(`
+    SELECT l.*, u.username AS pelapor
+    FROM laporan l
+    JOIN users u ON u.id=l.user_id
+    WHERE l.id=?
+  `, [laporan_id]);
+
+  if (!lap) return res.sendStatus(404);
+
   const [rows] = await db.query(`
-    SELECT telegram_chat_id
-    FROM users
+    SELECT telegram_chat_id FROM users
     WHERE role='teknisi' AND telegram_chat_id IS NOT NULL
   `);
 
-  if (!rows.length) return;
-
   const msg = `
-🛠️ *Laporan Helpdesk Baru*
+🛠️ *Laporan Baru*
+🆔 ${lap.id}
+👤 ${lap.pelapor}
+📝 ${lap.judul}
+📌 ${lap.status}
 
-🆔 *ID:* ${lap.id}
-👤 *Pelapor:* ${lap.pelapor}
-📝 *Judul:* ${lap.judul}
-📄 *Deskripsi:* ${lap.deskripsi}
-📍 *Lokasi:* ${lap.lokasi || "-"}
-⚠️ *Prioritas:* ${lap.prioritas || "-"}
-📌 *Status:* *${lap.status}*
-
-🔗 ${WEB_BASE_URL}/laporan/${lap.id}
+${WEB_BASE_URL}/laporan/${lap.id}
 `;
 
   for (const r of rows) {
@@ -84,111 +99,76 @@ async function notifTeknisi(lap) {
         parse_mode: "Markdown",
       });
     } else {
-      await safeSend(r.telegram_chat_id, msg, {
-        parse_mode: "Markdown",
-        disable_web_page_preview: true,
-      });
+      await safeSend(r.telegram_chat_id, msg, { parse_mode: "Markdown" });
     }
   }
-}
 
-/* ================= NOTIF USER ================= */
-async function notifUser(lap) {
-  if (!lap.telegram_chat_id) return;
-
-  const msg = `
-📢 *Update Laporan Helpdesk*
-
-📝 *Judul:* ${lap.judul}
-📄 *Deskripsi:* ${lap.deskripsi}
-👤 *PIC:* ${lap.pic || "-"}
-⏱️ *Estimasi:* ${lap.estimasi || "-"}
-💬 *Komentar:* ${lap.komentar || "-"}
-📌 *Status:* *${lap.status}*
-`;
-
-  await safeSend(lap.telegram_chat_id, msg, { parse_mode: "Markdown" });
-}
-
-/* ================= API DARI WEB ================= */
-app.post("/notify-teknisi", async (req, res) => {
-  const { laporan_id } = req.body;
-  if (!laporan_id) return res.status(400).json({ error: "laporan_id wajib" });
-
-  const [[lap]] = await db.query(
-    `
-    SELECT l.*, u.username AS pelapor
-    FROM laporan l
-    JOIN users u ON u.id = l.user_id
-    WHERE l.id = ?
-    `,
-    [laporan_id]
-  );
-
-  if (!lap) return res.status(404).json({ error: "laporan tidak ditemukan" });
-
-  await notifTeknisi(lap);
   res.json({ success: true });
 });
 
+/* === NOTIF USER === */
 app.post("/notify-user", async (req, res) => {
   const { laporan_id } = req.body;
-  if (!laporan_id) return res.status(400).json({ error: "laporan_id wajib" });
+  if (!laporan_id) return res.sendStatus(400);
 
-  const [[lap]] = await db.query(
-    `
+  const [[lap]] = await db.query(`
     SELECT l.*, u.telegram_chat_id
     FROM laporan l
-    JOIN users u ON u.id = l.user_id
-    WHERE l.id = ?
-    `,
-    [laporan_id]
+    JOIN users u ON u.id=l.user_id
+    WHERE l.id=?
+  `, [laporan_id]);
+
+  if (!lap || !lap.telegram_chat_id) return res.sendStatus(404);
+
+  await safeSend(
+    lap.telegram_chat_id,
+    `📢 *Update Laporan*
+📝 ${lap.judul}
+📌 ${lap.status}`,
+    { parse_mode: "Markdown" }
   );
 
-  if (!lap) return res.status(404).json({ error: "laporan tidak ditemukan" });
-
-  await notifUser(lap);
   res.json({ success: true });
 });
 
-/* ================= /start ================= */
+/* =================================================
+   🤖 TELEGRAM HANDLER
+================================================= */
+
 bot.onText(/\/start/, async (msg) => {
   await safeSend(
     msg.chat.id,
     `👋 *Helpdesk IT Bot*
-
+Selamat datang di Helpdesk IT RSUA! 
+Silahkan gunakan perintah di bawah ini:
 Perintah:
-• *daftar* → buat akun baru
-• *reset* → reset password`,
+• *daftar*
+• *reset*`,
     { parse_mode: "Markdown" }
   );
 });
 
-/* ================= MESSAGE HANDLER ================= */
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
-  const text = (msg.text || "").trim();
+  const text = (msg.text || "").trim().toLowerCase();
 
   try {
-    if (text.toLowerCase() === "daftar") {
+    /* ===== DAFTAR ===== */
+    if (text === "daftar") {
       sessions[chatId] = { step: "username" };
-      return safeSend(chatId, "Masukkan *username baru*:", {
-        parse_mode: "Markdown",
-      });
+      return safeSend(chatId, "Masukkan *username baru*:", { parse_mode: "Markdown" });
     }
 
-    if (text.toLowerCase() === "reset") {
-      const [[req]] = await db.query(
-        `
+    /* ===== RESET (AMBIL DARI password_resets) ===== */
+    if (text === "reset") {
+      const [[req]] = await db.query(`
         SELECT pr.id, pr.user_id
         FROM password_resets pr
-        JOIN users u ON u.id = pr.user_id
+        JOIN users u ON u.id=pr.user_id
         WHERE u.telegram_chat_id=? AND pr.used=0
         ORDER BY pr.id DESC
         LIMIT 1
-        `,
-        [chatId]
-      );
+      `, [chatId]);
 
       if (!req) return safeSend(chatId, "❌ Tidak ada permintaan reset.");
 
@@ -198,16 +178,19 @@ bot.on("message", async (msg) => {
         resetId: req.id,
       };
 
-      return safeSend(chatId, "🔐 Masukkan password baru:");
+      return safeSend(chatId, "🔐 Masukkan *password baru*:", {
+        parse_mode: "Markdown",
+      });
     }
 
     const s = sessions[chatId];
     if (!s) return;
 
+    /* ===== STEP DAFTAR ===== */
     if (s.step === "username") {
       const [cek] = await db.query(
         "SELECT id FROM users WHERE username=?",
-        [text]
+        [msg.text]
       );
 
       if (cek.length) {
@@ -215,35 +198,30 @@ bot.on("message", async (msg) => {
         return safeSend(chatId, "❌ Username sudah digunakan.");
       }
 
-      sessions[chatId] = { step: "password", username: text };
-      return safeSend(chatId, "Masukkan *password*:", {
-        parse_mode: "Markdown",
-      });
+      sessions[chatId] = { step: "password", username: msg.text };
+      return safeSend(chatId, "Masukkan *password*:", { parse_mode: "Markdown" });
     }
 
     if (s.step === "password") {
-      if (text.length < 4)
+      if (msg.text.length < 4)
         return safeSend(chatId, "❌ Password minimal 4 karakter.");
 
-      const hash = await bcrypt.hash(text, 10);
-
+      const hash = await bcrypt.hash(msg.text, 10);
       await db.query(
-        `
-        INSERT INTO users (username, password, role, telegram_chat_id)
-        VALUES (?, ?, 'user', ?)
-        `,
+        "INSERT INTO users (username,password,role,telegram_chat_id) VALUES (?,?, 'user', ?)",
         [s.username, hash, chatId]
       );
 
       delete sessions[chatId];
-      return safeSend(chatId, "✅ Akun berhasil dibuat.\nSilakan login di web.");
+      return safeSend(chatId, "✅ Akun berhasil dibuat.");
     }
 
+    /* ===== STEP RESET ===== */
     if (s.step === "reset_pass") {
-      if (text.length < 4)
+      if (msg.text.length < 4)
         return safeSend(chatId, "❌ Minimal 4 karakter.");
 
-      const hash = await bcrypt.hash(text, 10);
+      const hash = await bcrypt.hash(msg.text, 10);
 
       await db.query(
         "UPDATE users SET password=? WHERE id=?",
@@ -267,7 +245,6 @@ bot.on("message", async (msg) => {
 /* ================= START ================= */
 app.listen(PORT, async () => {
   console.log("🤖 Bot running on port", PORT);
-
   await bot.setWebHook(`${WEBHOOK_URL}/bot`);
   console.log("✅ Webhook set:", `${WEBHOOK_URL}/bot`);
 });

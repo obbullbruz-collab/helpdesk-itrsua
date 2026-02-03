@@ -10,12 +10,14 @@ export default function LaporanPage() {
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
   const [lokasi, setLokasi] = useState("");
-  const [priority, setPriority] = useState("sedang");
-  const [image, setImage] = useState(null); // ✅ sudah benar
+  const [priority, setPriority] = useState("Sedang");
+  const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
+
     setLoading(true);
 
     try {
@@ -25,16 +27,11 @@ export default function LaporanPage() {
       formData.append("kategori", category);
       formData.append("lokasi", lokasi);
       formData.append("prioritas", priority);
+      if (image) formData.append("gambar", image);
 
-      // ✅ FIX UTAMA: pakai image, BUKAN file
-      if (image) {
-        formData.append("gambar", image);
-      }
-
-      // ✅ FIX: FETCH CUMA SEKALI
       const res = await fetch("/api/laporan", {
         method: "POST",
-        credentials: "include",
+        credentials: "include", // 🔥 TOKEN COOKIE MASUK
         body: formData,
       });
 
@@ -45,10 +42,10 @@ export default function LaporanPage() {
         return;
       }
 
-      alert("Laporan berhasil dikirim!");
+      alert("✅ Laporan berhasil dikirim!");
       router.push("/dashboard");
     } catch (err) {
-      console.error(err);
+      console.error("KIRIM LAPORAN ERROR:", err);
       alert("Terjadi kesalahan saat mengirim laporan");
     } finally {
       setLoading(false);
@@ -98,12 +95,11 @@ export default function LaporanPage() {
             value={priority}
             onChange={(e) => setPriority(e.target.value)}
           >
-            <option value="rendah">Rendah</option>
-            <option value="sedang">Sedang</option>
-            <option value="tinggi">Tinggi</option>
+            <option value="Rendah">Rendah</option>
+            <option value="Sedang">Sedang</option>
+            <option value="Tinggi">Tinggi</option>
           </select>
 
-          {/* ✅ SUDAH BENAR */}
           <input
             type="file"
             accept="image/*"
@@ -111,8 +107,9 @@ export default function LaporanPage() {
           />
 
           <button
+            type="submit"
             disabled={loading}
-            className="w-full bg-white text-green-700 py-2 rounded font-semibold"
+            className="w-full bg-white text-green-700 py-2 rounded font-semibold disabled:opacity-60"
           >
             {loading ? "Mengirim..." : "Kirim Laporan"}
           </button>
