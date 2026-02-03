@@ -5,63 +5,22 @@ import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
 
 export async function GET() {
+  const token = cookies().get("token")?.value;
+
+  if (!token) {
+    return Response.json({ user: null }, { status: 401 });
+  }
+
   try {
-    const token = cookies().get("token")?.value;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // ❗ FIX 1: kalau tidak ada token → 401
-    if (!token) {
-      return new Response(JSON.stringify([]), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch {
-      // ❗ FIX 2: token invalid → 401
-      return new Response(JSON.stringify([]), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    const userId = decoded.id;
-
-    const [rows] = await db.query(
-      `
-      SELECT
-        id,
-        judul,
-        kategori,
-        prioritas,
-        deskripsi,
-        status,
-        pic,
-        komentar,
-        gambar,
-        created_at,
-        updated_at
-      FROM laporan
-      WHERE user_id = ?
-      ORDER BY created_at DESC
-      `,
-      [userId]
+    const [[user]] = await db.query(
+      "SELECT id, username, role FROM users WHERE id=?",
+      [decoded.id]
     );
 
-    // ✅ ini sudah benar, TIDAK diubah
-    return new Response(JSON.stringify(rows), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch (err) {
-    console.error("API LAPORAN ME ERROR:", err);
-
-    // ❗ server error beneran → 500
-    return new Response(JSON.stringify([]), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return Response.json({ user });
+  } catch {
+    return Response.json({ user: null }, { status: 401 });
   }
 }
