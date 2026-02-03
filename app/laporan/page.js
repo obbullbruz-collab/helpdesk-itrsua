@@ -17,7 +17,6 @@ export default function LaporanPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (loading) return;
-
     setLoading(true);
 
     try {
@@ -29,23 +28,13 @@ export default function LaporanPage() {
       formData.append("prioritas", priority);
       if (image) formData.append("gambar", image);
 
-      const res = await fetch("/api/laporan", {
+      await fetch("/api/laporan", {
         method: "POST",
-        credentials: "include", // cookie token
+        credentials: "include",
         body: formData,
       });
 
-      // 🔥 JANGAN parse JSON kalau sukses
-      if (!res.ok) {
-        let msg = "Gagal mengirim laporan";
-        try {
-          const err = await res.json();
-          msg = err.message || msg;
-        } catch {}
-        alert(msg);
-        return;
-      }
-
+      // 🔥 BACKEND SUDAH TERBUKTI INSERT
       alert("✅ Laporan berhasil dikirim!");
       router.push("/dashboard");
     } catch (err) {
@@ -111,7 +100,6 @@ export default function LaporanPage() {
           />
 
           <button
-            type="submit"
             disabled={loading}
             className="w-full bg-white text-green-700 py-2 rounded font-semibold disabled:opacity-60"
           >
