@@ -11,7 +11,7 @@ export default function LaporanPage() {
   const [category, setCategory] = useState("");
   const [lokasi, setLokasi] = useState("");
   const [priority, setPriority] = useState("sedang");
-  const [image, setImage] = useState(null);
+  const [image, setImage] = useState(null); // ✅ sudah benar
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -25,15 +25,16 @@ export default function LaporanPage() {
       formData.append("kategori", category);
       formData.append("lokasi", lokasi);
       formData.append("prioritas", priority);
-      formData.append("gambar", file);
-      
-      await fetch("/api/laporan", {
-        method: "POST",
-        credentials: "include",
-        body: formData,
-      });
+
+      // ✅ FIX UTAMA: pakai image, BUKAN file
+      if (image) {
+        formData.append("gambar", image);
+      }
+
+      // ✅ FIX: FETCH CUMA SEKALI
       const res = await fetch("/api/laporan", {
         method: "POST",
+        credentials: "include",
         body: formData,
       });
 
@@ -102,6 +103,7 @@ export default function LaporanPage() {
             <option value="tinggi">Tinggi</option>
           </select>
 
+          {/* ✅ SUDAH BENAR */}
           <input
             type="file"
             accept="image/*"
