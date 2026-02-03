@@ -31,22 +31,26 @@ export default function LaporanPage() {
 
       const res = await fetch("/api/laporan", {
         method: "POST",
-        credentials: "include", // 🔥 TOKEN COOKIE MASUK
+        credentials: "include", // cookie token
         body: formData,
       });
 
-      const data = await res.json();
-
+      // 🔥 JANGAN parse JSON kalau sukses
       if (!res.ok) {
-        alert(data.message || "Gagal mengirim laporan");
+        let msg = "Gagal mengirim laporan";
+        try {
+          const err = await res.json();
+          msg = err.message || msg;
+        } catch {}
+        alert(msg);
         return;
       }
 
       alert("✅ Laporan berhasil dikirim!");
       router.push("/dashboard");
     } catch (err) {
-      console.error("KIRIM LAPORAN ERROR:", err);
-      alert("Terjadi kesalahan saat mengirim laporan");
+      console.error("SUBMIT ERROR:", err);
+      alert("Terjadi kesalahan jaringan");
     } finally {
       setLoading(false);
     }
