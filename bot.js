@@ -5,16 +5,29 @@ import express from "express";
 
 /* ================= ENV ================= */
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const WEBHOOK_URL = process.env.WEBHOOK_URL;
+const WEBHOOK_URL = process.env.WEBHOOK_URL; // https://xxxx.up.railway.app
 const WEB_BASE_URL = process.env.WEB_BASE_URL;
 const PORT = process.env.PORT || 8080;
 
-/* ================= BOT & SERVER ================= */
-// 🔥 FIX 1: aktifkan mode webhook dengan benar
-const bot = new TelegramBot(TOKEN, {
-  webHook: { port: PORT },
-});
+/* ================= VALIDASI ENV ================= */
+if (!TOKEN) {
+  console.error("❌ TELEGRAM_BOT_TOKEN belum diset");
+  process.exit(1);
+}
+if (!WEBHOOK_URL) {
+  console.error("❌ WEBHOOK_URL belum diset");
+  process.exit(1);
+}
+if (!process.env.DATABASE_URL) {
+  console.error("❌ DATABASE_URL belum diset");
+  process.exit(1);
+}
 
+/* ================= BOT ================= */
+// ⚠️ JANGAN pakai webHook:{port} di Railway
+const bot = new TelegramBot(TOKEN);
+
+/* ================= SERVER ================= */
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -25,27 +38,28 @@ const db = await mysql.createPool(process.env.DATABASE_URL);
 /* ================= SESSION ================= */
 const sessions = {};
 
+/* ================= TELEGRAM WEBHOOK ENDPOINT ================= */
+app.post("/bot", (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+
 /* ================= HELPER ================= */
 async function safeSend(chatId, text, opt = {}) {
   try {
     await bot.sendMessage(chatId, text, opt);
-    console.log("✅ SEND TO:", chatId);
   } catch (e) {
-    console.error("❌ SEND ERROR:", e.message);
+    console.error("SEND ERROR:", e.message);
   }
 }
 
 /* ================= NOTIF TEKNISI ================= */
 async function notifTeknisi(lap) {
-  const [rows] = await db.query(
-    `
+  const [rows] = await db.query(`
     SELECT telegram_chat_id
     FROM users
     WHERE role='teknisi' AND telegram_chat_id IS NOT NULL
-    `
-  );
-
-  console.log("👷 Teknisi ditemukan:", rows.length);
+  `);
 
   if (!rows.length) return;
 
@@ -98,8 +112,6 @@ async function notifUser(lap) {
 
 /* ================= API DARI WEB ================= */
 app.post("/notify-teknisi", async (req, res) => {
-  console.log("🔥 HIT /notify-teknisi", req.body);
-
   const { laporan_id } = req.body;
   if (!laporan_id) return res.status(400).json({ error: "laporan_id wajib" });
 
@@ -120,8 +132,6 @@ app.post("/notify-teknisi", async (req, res) => {
 });
 
 app.post("/notify-user", async (req, res) => {
-  console.log("🔥 HIT /notify-user", req.body);
-
   const { laporan_id } = req.body;
   if (!laporan_id) return res.status(400).json({ error: "laporan_id wajib" });
 
@@ -195,11 +205,9 @@ bot.on("message", async (msg) => {
     if (!s) return;
 
     if (s.step === "username") {
-      const username = text;
-
       const [cek] = await db.query(
         "SELECT id FROM users WHERE username=?",
-        [username]
+        [text]
       );
 
       if (cek.length) {
@@ -207,7 +215,7 @@ bot.on("message", async (msg) => {
         return safeSend(chatId, "❌ Username sudah digunakan.");
       }
 
-      sessions[chatId] = { step: "password", username };
+      sessions[chatId] = { step: "password", username: text };
       return safeSend(chatId, "Masukkan *password*:", {
         parse_mode: "Markdown",
       });
@@ -256,11 +264,10 @@ bot.on("message", async (msg) => {
   }
 });
 
-/* ================= START SERVER ================= */
-// 🔥 FIX 2: listen dulu, BARU setWebhook
+/* ================= START ================= */
 app.listen(PORT, async () => {
   console.log("🤖 Bot running on port", PORT);
 
   await bot.setWebHook(`${WEBHOOK_URL}/bot`);
-  console.log("✅ Webhook set to:", `${WEBHOOK_URL}/bot`);
+  console.log("✅ Webhook set:", `${WEBHOOK_URL}/bot`);
 });
