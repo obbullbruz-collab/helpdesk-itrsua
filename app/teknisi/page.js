@@ -38,9 +38,13 @@ export default function TeknisiPage() {
       const res = await fetch("/api/teknisi/laporan", {
         credentials: "include",
       });
+
       const data = await res.json();
+      console.log("LAPORAN:", data); // debug
+
       setLaporan(Array.isArray(data) ? data : []);
-    } catch {
+    } catch (err) {
+      console.log(err);
       setLaporan([]);
     }
   };
@@ -124,12 +128,29 @@ export default function TeknisiPage() {
   // ================= LABEL GRAFIK =================
   const labels = chart.map((c) => {
     if (mode === "mingguan") {
-      return `${c.start_date} - ${c.end_date}`;
+      const start = new Date(c.start_date).toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+      });
+      const end = new Date(c.end_date).toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+      });
+      return `${start} – ${end}`;
     }
+
     if (mode === "bulanan") {
-      return `${c.month}/${c.year}`;
+      const date = new Date(c.year, c.month - 1, 1);
+      return date.toLocaleDateString("id-ID", {
+        month: "long",
+        year: "numeric",
+      });
     }
-    return c.label;
+
+    return new Date(c.label).toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "short",
+    });
   });
 
   const values = chart.map((c) => c.total);
@@ -138,8 +159,53 @@ export default function TeknisiPage() {
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">Dashboard Teknisi</h1>
 
-      {/* ================= FILTER PIC ================= */}
+      {/* ================= GRAFIK ================= */}
       <div className="bg-white p-5 rounded-xl shadow mb-6">
+        <div className="flex justify-between mb-3">
+          <h2 className="font-semibold">Grafik Laporan</h2>
+
+          <div className="flex gap-2">
+            {["harian", "mingguan", "bulanan"].map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className={`px-3 py-1 rounded ${
+                  mode === m ? "bg-green-600 text-white" : "bg-gray-200"
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="h-[280px]">
+          <Line
+            data={{
+              labels,
+              datasets: [
+                {
+                  data: values,
+                  borderColor: "#22c55e",
+                  backgroundColor: "rgba(34,197,94,0.15)",
+                  fill: true,
+                },
+              ],
+            }}
+            options={{
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: {
+                y: { beginAtZero: true },
+              },
+            }}
+          />
+        </div>
+      </div>
+
+      {/* ================= FILTER PIC (DI BAWAH GRAFIK) ================= */}
+      <div className="bg-white p-5 rounded-xl shadow mb-10">
         <h2 className="font-semibold mb-3">Filter PIC</h2>
 
         <div className="flex gap-2 mb-3">
@@ -181,23 +247,7 @@ export default function TeknisiPage() {
         </div>
       </div>
 
-      {/* ================= GRAFIK ================= */}
-      <div className="bg-white p-5 rounded-xl shadow mb-10">
-        <h2 className="font-semibold mb-3">Grafik Laporan</h2>
-
-        <Line
-          data={{
-            labels,
-            datasets: [
-              {
-                data: values,
-                borderColor: "#22c55e",
-              },
-            ],
-          }}
-        />
-      </div>
-
+      {/* ================= LIST LAPORAN ================= */}
       <Section title="Laporan Baru" items={baru} onUpdate={handleUpdate} />
       <Section title="Laporan Diproses" items={proses} onUpdate={handleUpdate} />
       <Section title="Laporan Selesai" items={selesai} onUpdate={handleUpdate} />
@@ -215,9 +265,11 @@ function Section({ title, items, onUpdate }) {
         <p className="text-gray-400 text-sm">Tidak ada data</p>
       )}
 
-      {items.map((item) => (
-        <LaporanCard key={item.id} item={item} onUpdate={onUpdate} />
-      ))}
+      <div className="space-y-4">
+        {items.map((item) => (
+          <LaporanCard key={item.id} item={item} onUpdate={onUpdate} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -230,18 +282,51 @@ function LaporanCard({ item, onUpdate }) {
   const [komentar, setKomentar] = useState(item.komentar || "");
 
   return (
-    <div className="border p-4 mb-3 bg-yellow-50">
-      <h3 className="font-bold">{item.judul}</h3>
+    <div className="border rounded p-4 flex gap-4 bg-yellow-50">
+      <div className="flex-1">
+        <h3 className="font-bold">{item.judul}</h3>
 
-      <div className="flex gap-2 mt-2">
-        <input value={pic} onChange={(e) => setPic(e.target.value)} />
-        <button
-          onClick={() =>
-            onUpdate(item.id, status, pic, estimasi, komentar)
-          }
-        >
-          Update
-        </button>
+        <div className="flex gap-2 mt-3 flex-wrap">
+          <select
+            className="border p-1 rounded"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+          >
+            <option>Baru</option>
+            <option>Diproses</option>
+            <option>Selesai</option>
+          </select>
+
+          <input
+            className="border p-1 rounded"
+            placeholder="PIC"
+            value={pic}
+            onChange={(e) => setPic(e.target.value)}
+          />
+
+          <input
+            className="border p-1 rounded"
+            placeholder="Estimasi"
+            value={estimasi}
+            onChange={(e) => setEstimasi(e.target.value)}
+          />
+
+          <input
+            className="border p-1 rounded"
+            placeholder="Komentar"
+            value={komentar}
+            onChange={(e) => setKomentar(e.target.value)}
+          />
+
+          <button
+            onClick={() =>
+              onUpdate(item.id, status, pic, estimasi, komentar)
+            }
+            className="bg-blue-600 text-white px-3 rounded"
+          >
+            Update
+          </button>
+        </div>
       </div>
     </div>
   );
