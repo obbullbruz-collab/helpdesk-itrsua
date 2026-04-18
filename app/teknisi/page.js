@@ -30,7 +30,9 @@ export default function TeknisiPage() {
 
   // ================= FETCH =================
   const fetchLaporan = async () => {
-    const res = await fetch("/api/teknisi/laporan", { credentials: "include" });
+    const res = await fetch("/api/teknisi/laporan", {
+      credentials: "include",
+    });
     const data = await res.json();
     setLaporan(Array.isArray(data) ? data : []);
   };
@@ -109,10 +111,13 @@ export default function TeknisiPage() {
   const labels = chart.map((c) =>
     mode === "bulanan"
       ? new Date(c.year, c.month - 1).toLocaleDateString("id-ID", {
-          month: "long",
+          month: "short",
           year: "numeric",
         })
-      : new Date(c.label || c.start_date).toLocaleDateString("id-ID")
+      : new Date(c.label || c.start_date).toLocaleDateString("id-ID", {
+          day: "2-digit",
+          month: "short",
+        })
   );
 
   const values = chart.map((c) => c.total);
@@ -150,9 +155,20 @@ export default function TeknisiPage() {
                   data: values,
                   borderColor: "#22c55e",
                   backgroundColor: "rgba(34,197,94,0.15)",
+                  tension: 0.4,
                   fill: true,
                 },
               ],
+            }}
+            options={{
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  ticks: { stepSize: 1 },
+                },
+              },
             }}
           />
         </div>
@@ -170,7 +186,6 @@ export default function TeknisiPage() {
           onChange={(e) => setSearchPic(e.target.value)}
         />
 
-        {/* SUMMARY */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {filteredPic.map((item, i) => (
             <div key={i} className="p-4 bg-green-50 rounded text-center">
@@ -229,6 +244,8 @@ function Section({ title, items, onUpdate }) {
 function LaporanCard({ item, onUpdate }) {
   const [status, setStatus] = useState(item.status);
   const [pic, setPic] = useState(item.pic || "");
+  const [estimasi, setEstimasi] = useState(item.estimasi || "");
+  const [komentar, setKomentar] = useState(item.komentar || "");
 
   return (
     <div className="border rounded p-4 flex gap-4 bg-yellow-50">
@@ -242,23 +259,49 @@ function LaporanCard({ item, onUpdate }) {
 
       <div className="flex-1">
         <h3 className="font-bold">{item.judul}</h3>
-        <p className="text-sm text-gray-600">{item.username}</p>
+        <p className="text-sm text-gray-600">
+          {item.username} •{" "}
+          {new Date(item.created_at).toLocaleString("id-ID")}
+        </p>
 
-        <div className="flex gap-2 mt-3">
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
+        <p className="text-sm mt-1">{item.deskripsi}</p>
+
+        <div className="flex gap-2 mt-3 flex-wrap">
+          <select
+            className="border p-1 rounded"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+          >
             <option>Baru</option>
             <option>Diproses</option>
             <option>Selesai</option>
           </select>
 
           <input
+            className="border p-1 rounded"
+            placeholder="PIC"
             value={pic}
             onChange={(e) => setPic(e.target.value)}
-            placeholder="PIC"
+          />
+
+          <input
+            className="border p-1 rounded"
+            placeholder="Estimasi"
+            value={estimasi}
+            onChange={(e) => setEstimasi(e.target.value)}
+          />
+
+          <input
+            className="border p-1 rounded flex-1"
+            placeholder="Komentar"
+            value={komentar}
+            onChange={(e) => setKomentar(e.target.value)}
           />
 
           <button
-            onClick={() => onUpdate(item.id, status, pic)}
+            onClick={() =>
+              onUpdate(item.id, status, pic, estimasi, komentar)
+            }
             className="bg-blue-600 text-white px-3 rounded"
           >
             Update
