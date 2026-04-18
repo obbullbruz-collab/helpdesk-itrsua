@@ -70,7 +70,7 @@ export async function POST(req) {
       });
     } catch (e) {
       console.error("NOTIF USER ERROR:", e.message);
-      // ❗ sengaja tidak return error
+      
     }
 
     // ================= RESPONSE =================

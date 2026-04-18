@@ -24,6 +24,7 @@ ChartJS.register(
 export default function TeknisiPage() {
   const [laporan, setLaporan] = useState([]);
   const [chart, setChart] = useState([]);
+  const [dataPic, setDataPic] = useState([]); // 🔥 NEW
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState("harian");
 
@@ -31,7 +32,7 @@ export default function TeknisiPage() {
   const fetchLaporan = async () => {
     try {
       const res = await fetch("/api/teknisi/laporan", {
-        credentials: "include", // 🔥 COOKIE
+        credentials: "include",
       });
       if (!res.ok) return setLaporan([]);
       const data = await res.json();
@@ -45,7 +46,7 @@ export default function TeknisiPage() {
   const fetchChart = async (m = mode) => {
     try {
       const res = await fetch(`/api/teknisi/statistik?mode=${m}`, {
-        credentials: "include", // 🔥 COOKIE
+        credentials: "include",
       });
       const data = await res.json();
       setChart(Array.isArray(data) ? data : []);
@@ -54,11 +55,25 @@ export default function TeknisiPage() {
     }
   };
 
+  // ================= FETCH PIC =================
+  const fetchPic = async () => {
+    try {
+      const res = await fetch(`/api/teknisi/statistik?mode=pic`, {
+        credentials: "include",
+      });
+      const data = await res.json();
+      setDataPic(Array.isArray(data) ? data : []);
+    } catch {
+      setDataPic([]);
+    }
+  };
+
   useEffect(() => {
     const init = async () => {
       setLoading(true);
       await fetchLaporan();
       await fetchChart();
+      await fetchPic(); // 🔥 NEW
       setLoading(false);
     };
     init();
@@ -68,12 +83,12 @@ export default function TeknisiPage() {
     fetchChart(mode);
   }, [mode]);
 
-  // ================= UPDATE LAPORAN (COOKIE AUTH) =================
+  // ================= UPDATE =================
   const handleUpdate = async (id, status, pic, estimasi, komentar) => {
     try {
       const res = await fetch("/api/laporan/update", {
         method: "POST",
-        credentials: "include", // 🔥 INI KUNCI
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
@@ -91,6 +106,7 @@ export default function TeknisiPage() {
 
       alert("Berhasil update laporan");
       await fetchLaporan();
+      await fetchPic(); // 🔥 UPDATE BIAR LANGSUNG REFRESH
     } catch (err) {
       alert(err.message);
     }
@@ -103,7 +119,7 @@ export default function TeknisiPage() {
   const proses = laporan.filter((l) => l.status === "Diproses");
   const selesai = laporan.filter((l) => l.status === "Selesai");
 
-  // ================= LABEL GRAFIK =================
+  // ================= LABEL =================
   const labels = chart.map((c) => {
     if (mode === "mingguan") {
       const start = new Date(c.start_date).toLocaleDateString("id-ID", {
@@ -182,6 +198,33 @@ export default function TeknisiPage() {
         </div>
       </div>
 
+      {/* ================= STATISTIK PIC ================= */}
+      <div className="bg-white p-5 rounded-xl shadow mb-10">
+        <h2 className="font-semibold mb-4">Kinerja Teknisi</h2>
+
+        {dataPic.length === 0 ? (
+          <p className="text-gray-400 text-sm">Belum ada data</p>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {dataPic.map((item, index) => (
+              <div
+                key={index}
+                className={`p-4 rounded-lg text-center ${
+                  index === 0 ? "bg-yellow-100" : "bg-green-50"
+                }`}
+              >
+                <p className="font-bold text-lg">
+                  #{index + 1} {item.pic}
+                </p>
+                <p className="text-sm text-gray-600">
+                  {item.total} laporan selesai
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <Section title="Laporan Baru" items={baru} onUpdate={handleUpdate} />
       <Section title="Laporan Diproses" items={proses} onUpdate={handleUpdate} />
       <Section title="Laporan Selesai" items={selesai} onUpdate={handleUpdate} />
@@ -233,11 +276,6 @@ function LaporanCard({ item, onUpdate }) {
         <p className="text-sm text-gray-600">
           {item.username} •{" "}
           {new Date(item.created_at).toLocaleString("id-ID")}
-        </p>
-
-        <p className="text-sm">
-          <b>Kategori:</b> {item.kategori} |{" "}
-          <b>Prioritas:</b> {item.prioritas}
         </p>
 
         <p className="text-sm mt-1">{item.deskripsi}</p>

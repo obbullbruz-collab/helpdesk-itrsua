@@ -64,8 +64,7 @@ export default function DashboardUser() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {laporan.map((l) => {
-          // 🔥 LOGIC PALING PENTING
-          // hanya render gambar kalau ISINYA URL CLOUDINARY
+         
           const img =
             typeof l.gambar === "string" &&
             l.gambar.startsWith("http")

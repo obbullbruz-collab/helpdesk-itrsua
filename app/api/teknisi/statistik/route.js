@@ -49,6 +49,20 @@ export async function GET(req) {
       rows = r;
     }
 
+    // ================= PER PIC =================
+    else if (mode === "pic") {
+      const [r] = await db.query(`
+        SELECT 
+          pic,
+          COUNT(*) AS total
+        FROM laporan
+        WHERE status = 'selesai'
+        GROUP BY pic
+      `);
+
+      rows = r;
+    }
+    
     return Response.json(rows);
   } catch (err) {
     console.error("STATISTIK ERROR:", err);
